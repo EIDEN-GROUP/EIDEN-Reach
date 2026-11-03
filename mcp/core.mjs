@@ -43,6 +43,14 @@ export function validateContactRequest(input) {
   return { requestId: requestId(input?.requestId), firstName, lastName, email }
 }
 
+
+export function validateTaskRequest(input) {
+  const title = requiredString(input?.title, 'title', 200)
+  const dueAt = typeof input?.dueAt === 'string' && input.dueAt.trim() ? input.dueAt.trim() : null
+  if (dueAt && Number.isNaN(new Date(dueAt).getTime())) throw new Error('dueAt must be a valid ISO 8601 datetime')
+  return { requestId: requestId(input?.requestId), title, dueAt }
+}
+
 export function validateCompanyRequest(input) {
   const name = requiredString(input?.name, 'name', 200)
   const domain = typeof input?.domain === 'string' && input.domain.trim()

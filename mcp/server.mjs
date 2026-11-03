@@ -5,6 +5,7 @@ import {
   validateCompanyRequest,
   validateContactRequest,
   validateRuntimeScope,
+  validateTaskRequest,
 } from './core.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
@@ -147,6 +148,20 @@ const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'request_create_task',
+    description: 'Request approval to create a follow-up task. Does not create the task.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string', description: 'Stable caller-generated idempotency ID.' },
+        title: { type: 'string' },
+        dueAt: { type: 'string', description: 'ISO 8601 datetime' },
+      },
+      required: ['requestId', 'title'],
+      additionalProperties: false,
+    },
+  },
 ]
 
 async function callTool(name, args) {
@@ -188,6 +203,13 @@ async function callTool(name, args) {
     const row = await createApproval(scope, 'company.create', 'company', input.requestId, {
       name: input.name,
       domain: input.domain,
+    })
+    data = { approvalId: row.id, state: row.state, preview: row.preview, expiresAt: row.expires_at }
+  } else if (name === 'request_create_task') {
+    const input = validateTaskRequest(args)
+    const row = await createApproval(scope, 'task.create', 'task', input.requestId, {
+      title: input.title,
+      dueAt: input.dueAt,
     })
     data = { approvalId: row.id, state: row.state, preview: row.preview, expiresAt: row.expires_at }
   } else {

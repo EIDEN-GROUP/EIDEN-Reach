@@ -5,6 +5,7 @@ import {
   validateCompanyRequest,
   validateContactRequest,
   validateRuntimeScope,
+  validateTaskRequest,
 } from '../mcp/core.mjs'
 
 describe('MCP runtime scope', () => {
@@ -51,5 +52,12 @@ describe('MCP approval requests', () => {
   it('creates deterministic per-actor idempotency keys', () => {
     expect(approvalIdempotencyKey('contact.create', '11111111-1111-4111-8111-111111111111', 'req-42'))
       .toBe('mcp:contact.create:11111111-1111-4111-8111-111111111111:req-42')
+  })
+
+  it('validates task requests before approval creation', () => {
+    expect(validateTaskRequest({ requestId: 'req-9', title: 'Follow up with Ada', dueAt: '2026-11-05T10:00:00Z' })).toEqual({ requestId: 'req-9', title: 'Follow up with Ada', dueAt: '2026-11-05T10:00:00Z' })
+    expect(() => validateTaskRequest({ requestId: 'req-9', title: '' })).toThrow('title is required')
+    expect(() => validateTaskRequest({ requestId: 'req-9', title: 'Follow up', dueAt: 'not a date' })).toThrow('dueAt')
+    expect(() => validateTaskRequest({ title: 'Follow up' })).toThrow('requestId')
   })
 })
