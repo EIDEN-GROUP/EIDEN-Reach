@@ -26,6 +26,10 @@ node mcp/server.mjs
 - `list_contacts` — list contacts for an organization (read-only).
 - `list_companies` — list companies for an organization (read-only).
 - `list_deals` — list deals for an organization (read-only).
+- `list_tasks` — list tasks for an organization (read-only).
+- `list_pipeline_stages` — list stages from the default pipeline (read-only).
+- `list_sequences` — list sequences for an organization (read-only).
+- `list_enrollments` — list sequence enrollments (manager role required).
 
 Tenant and actor scope cannot be supplied by a tool caller. They are fixed when
 the process starts and verified against `memberships` before every tool call.

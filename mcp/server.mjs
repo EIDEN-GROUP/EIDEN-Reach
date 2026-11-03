@@ -116,6 +116,8 @@ const TOOLS = [
   { name: 'list_tasks', description: 'List tasks in the configured organization.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'list_pipeline_stages', description: 'List stages from the default pipeline.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'list_pending_approvals', description: 'List pending write approvals. Manager role required.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'list_sequences', description: 'List sequences in the configured organization.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'list_enrollments', description: 'List sequence enrollments. Manager role required.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   {
     name: 'request_create_contact',
     description: 'Request approval to create a contact. Does not create the contact.',
@@ -168,6 +170,11 @@ async function callTool(name, args) {
     const pipelineId = Array.isArray(pipelines) ? pipelines[0]?.id : null
     if (!pipelineId) throw new Error('No default pipeline exists for the configured organization')
     data = await selectRows('pipeline_stages', 'id,name,position,probability,is_won,is_lost', { pipeline_id: `eq.${pipelineId}` }, { order: 'position.asc' })
+  } else if (name === 'list_sequences') {
+    data = await selectRows('sequences', 'id,name,description,status,category,current_version,daily_limit,sender_mailbox_id', { organization_id: `eq.${scope.organizationId}`, archived_at: 'is.null' }, { order: 'name.asc' })
+  } else if (name === 'list_enrollments') {
+    assertManager(role)
+    data = await selectRows('sequence_enrollments', 'id,sequence_id,sequence_version,contact_id,state,next_step_position,next_run_at,stopped_at,stop_reason', { organization_id: `eq.${scope.organizationId}` }, { order: 'next_run_at.asc.nullsfirst' })
   } else if (name === 'request_create_contact') {
     const input = validateContactRequest(args)
     const row = await createApproval(scope, 'contact.create', 'contact', input.requestId, {
