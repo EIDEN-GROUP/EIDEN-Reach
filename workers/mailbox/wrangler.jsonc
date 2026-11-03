@@ -1,0 +1,7 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "eiden-reach-mailbox",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-28",
+  "observability": { "enabled": true }
+}

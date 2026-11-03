@@ -1,0 +1,4 @@
+project_id = "eiden-reach"
+
+[functions.team-admin]
+verify_jwt = true

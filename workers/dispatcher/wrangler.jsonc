@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "eiden-reach-job-dispatcher",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-28",
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}

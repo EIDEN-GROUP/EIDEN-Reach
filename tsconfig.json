@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" },
+    { "path": "./workers/dispatcher/tsconfig.json" },
+    { "path": "./workers/mailbox/tsconfig.json" }
+  ]
+}
