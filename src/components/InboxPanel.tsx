@@ -117,7 +117,7 @@ export function InboxPanel({ userId, canConnect }: { userId: string; canConnect:
         supabase!.from('email_messages')
           .select('id,thread_id,subject,text_body,html_body,snippet,received_at,sent_at,direction')
           .eq('mailbox_account_id', mailboxId)
-          .order('received_at', { ascending: true, nullsFirst: false })
+          .order('received_at', { ascending: false, nullsFirst: false })
           .limit(200),
       ])
       if (threadResult.error || messageResult.error) throw threadResult.error ?? messageResult.error
@@ -329,7 +329,7 @@ export function InboxPanel({ userId, canConnect }: { userId: string; canConnect:
           <div className="thread-list-heading"><b>Conversations</b><span>{threads.length}</span></div>
           {messageLoading ? <div className="table-message">Loading conversations…</div> : messageError ? <p className="inline-error" role="alert">{messageError}</p> : threads.length ? threads.map(thread => {
             const threadMessages = messages.filter(item => item.thread_id === thread.id)
-            const latest = threadMessages.at(-1)
+            const latest = threadMessages[0]
             const sender = latest?.participants?.find(participant => participant.participant_type === 'from')
             return <button className={`thread-button ${selectedThreadId === thread.id ? 'active' : ''}`} type="button" key={thread.id} onClick={() => setSelectedThreadId(thread.id)}>
               <span className="thread-avatar">{(sender?.display_name || sender?.email_address || '?').slice(0, 1).toUpperCase()}</span>
