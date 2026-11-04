@@ -280,6 +280,14 @@ code, kbd { font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
 .status-chip-completed { background:#efeff0; color:#3a3a3c; border-color:#d9d9dc; }
 .status-chip-unsubscribed { background:#fbe9e8; color:#7a2a22; border-color:#f3c4bf; }
 .status-chip-bounced { background:#f1e9fb; color:#4b2c7a; border-color:#d6bbef; }
+.outreach-health { margin:12px 0; }
+.outreach-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+.outreach-card { border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; background:#fafafa; display:flex; flex-direction:column; gap:2px; }
+.outreach-card span { font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:#6b7280; }
+.outreach-card strong { font-size:20px; }
+.outreach-card small { color:#6b7280; }
+.tone-good { border-color:#bbf7d0; background:#f0fdf4; }
+.tone-bad { border-color:#fecaca; background:#fef2f2; }
 .preflight-panel { border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; margin:10px 0; background:#fafafa; }
 .preflight-panel h4 { margin:0 0 6px; font-size:13px; letter-spacing:.04em; }
 .preflight-panel ol { list-style:none; margin:0; padding:0; display:grid; gap:4px; }

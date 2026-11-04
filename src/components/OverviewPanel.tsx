@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, BriefcaseBusiness, CheckCircle2, Clock3, UsersRound } from 'lucide-react'
-import { summarizeDealValue, taskUrgency, type TaskUrgency } from '../lib/dashboard-metrics'
+import { summarizeDealValue, taskUrgency, calculateSequenceKpis, formatKpi, type TaskUrgency, type SequenceKpis } from '../lib/dashboard-metrics'
 import { supabase } from '../lib/supabase'
 
 type Deal = {
@@ -50,6 +50,8 @@ export function OverviewPanel({ userId }: { userId: string }) {
   const [deals, setDeals] = useState<Deal[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [stages, setStages] = useState<Stage[]>([])
+  const [kpis, setKpis] = useState<SequenceKpis | null>(null)
+  const [mailableSuppressed, setMailableSuppressed] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -72,7 +74,7 @@ export function OverviewPanel({ userId }: { userId: string }) {
         .eq('is_default', true)
         .maybeSingle()
 
-      const [contactResult, companyResult, sequenceResult, dealResult, taskResult, stageResult] = await Promise.all([
+      const [contactResult, companyResult, sequenceResult, dealResult, taskResult, stageResult, enrollmentResult, activityResult, suppressionResult] = await Promise.all([
         supabase!.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId).is('archived_at', null),
         supabase!.from('companies').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId).is('archived_at', null),
         supabase!.from('sequences').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId).eq('status', 'active').is('archived_at', null),
@@ -81,7 +83,19 @@ export function OverviewPanel({ userId }: { userId: string }) {
         pipeline.data
           ? supabase!.from('pipeline_stages').select('id,name,position,probability').eq('pipeline_id', pipeline.data.id).order('position')
           : Promise.resolve({ data: [] as Stage[], error: null }),
+        supabase!.from('sequence_enrollments').select('state,stop_reason,next_step_position').eq('organization_id', organizationId).limit(2001),
+        supabase!.from('activity_events').select('event_type', { count: 'exact' }).eq('organization_id', organizationId).ilike('event_type', '%sent%').limit(1),
+        supabase!.from('suppression_records').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId),
       ])
+
+      let stepStates: Array<{ state: string }> = []
+      if (enrollmentResult.data?.length) {
+        const ids = (enrollmentResult.data as Array<{ id?: string }>).map(e => e.id).filter(Boolean) as string[]
+        if (ids.length) {
+          const ss = await supabase!.from('enrollment_step_states').select('state').in('enrollment_id', ids).limit(501)
+          if (!ss.error && ss.data) stepStates = ss.data as Array<{ state: string }>
+        }
+      }
 
       if (!active) return
       const firstError = [contactResult, companyResult, sequenceResult, dealResult, taskResult, stageResult]
@@ -95,6 +109,10 @@ export function OverviewPanel({ userId }: { userId: string }) {
         setDeals((dealResult.data ?? []) as Deal[])
         setTasks((taskResult.data ?? []) as Task[])
         setStages((stageResult.data ?? []) as Stage[])
+        const enrollments = (enrollmentResult.data ?? []) as Array<{ state: string; stop_reason?: string | null; next_step_position: number }>
+        const sentCount = activityResult.count ?? 0
+        setKpis(calculateSequenceKpis({ enrollments, stepStates, sentCount }))
+        setMailableSuppressed(suppressionResult.count ?? 0)
       }
       setLoading(false)
     })()
@@ -106,6 +124,17 @@ export function OverviewPanel({ userId }: { userId: string }) {
   const openValue = useMemo(() => summarizeDealValue(openDeals), [openDeals])
   const now = new Date()
   const overdueTasks = tasks.filter(task => taskUrgency(task.due_at, now) === 'overdue').length
+  // outreachHealth — complements campaign analytics
+  const outreachHealth = kpis ? [
+    { label: 'Enrolled', value: formatKpi(kpis.enrolled), hint: `${formatKpi(kpis.active)} active`, tone: 'neutral' as const },
+    { label: 'Emails sent', value: formatKpi(kpis.emailsSent), hint: `${formatKpi(kpis.emailsCompleted)} completed`, tone: 'neutral' as const },
+    { label: 'Reply rate', value: formatKpi(kpis.replyRate, '%'), hint: `${formatKpi(kpis.replied)} replied`, tone: 'good' as const },
+    { label: 'Positive reply', value: formatKpi(kpis.positiveReplyRate, '%'), hint: 'interested / contacted', tone: 'good' as const },
+    { label: 'Bounce rate', value: formatKpi(kpis.bounceRate, '%'), hint: `${formatKpi(kpis.bounced)} bounced`, tone: (kpis.bounceRate && kpis.bounceRate > 5 ? 'bad' : 'neutral') as 'bad' | 'neutral' },
+    { label: 'Unsubscribed', value: formatKpi(kpis.unsubscribed), hint: 'opted out', tone: 'neutral' as const },
+    { label: 'Completion', value: formatKpi(kpis.completionRate, '%'), hint: `${formatKpi(kpis.completed)} finished`, tone: 'neutral' as const },
+    { label: 'Failure rate', value: formatKpi(kpis.failureRate, '%'), hint: `${formatKpi(kpis.emailsFailed)} failed`, tone: (kpis.failureRate && kpis.failureRate > 5 ? 'bad' : 'neutral') as 'bad' | 'neutral' },
+  ] : []
 
   if (loading) return <div className="overview-loading" aria-label="Loading workspace brief">
     <div className="skeleton-line wide" /><div className="skeleton-metrics" />
@@ -136,6 +165,12 @@ export function OverviewPanel({ userId }: { userId: string }) {
       <div className="metric-ledger-item"><Clock3 size={17} /><span>Sequences live</span><strong>{activeSequences}</strong><small>active automations</small></div>
     </section>
 
+    {kpis && <section className="panel outreach-health" aria-label="Outreach health">
+      <header className="panel-heading"><div><span className="section-kicker">Outreach health</span><h2>Sequence KPIs</h2></div><span className="quiet-label">{mailableSuppressed} suppressed</span></header>
+      <div className="outreach-grid">{outreachHealth.map(m => (
+        <div key={m.label} className={`outreach-card tone-${m.tone}`}><span>{m.label}</span><strong>{m.value}</strong><small>{m.hint}</small></div>
+      ))}</div>
+    </section>}
     <div className="overview-workbench">
       <section className="panel operational-panel pipeline-pulse">
         <header className="panel-heading"><div><span className="section-kicker">Pipeline pulse</span><h2>Stage distribution</h2></div><span className="quiet-label">{openDeals.length} open</span></header>
