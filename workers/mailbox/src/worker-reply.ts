@@ -1,5 +1,18 @@
-import type { Env } from './worker'
-import { serviceHeaders } from './worker'
+import type { Env } from './runtime'
+import { serviceHeaders } from './runtime'
+
+async function notifySlack(webhook: string | undefined, text: string): Promise<void> {
+  if (!webhook) return
+  try {
+    await fetch(webhook, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+  } catch (error) {
+    console.error('SLACK_NOTIFY_FAILED', error)
+  }
+}
 
 export async function stopEnrollmentsForReply(env: Env, organizationId: string, participants: Array<{ participant_type: string; email_address: string }>, inReplyTo: string | null, references: string[]): Promise<number> {
   try {
@@ -28,14 +41,14 @@ async function findContactIdByEmail(env: Env, organizationId: string, email: str
 
 async function stopEnrollmentsForContact(env: Env, organizationId: string, contactId: string, from: string, inReplyTo: string | null, references: string[]): Promise<number> {
   const enrollmentUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/sequence_enrollments`)
-  enrollmentUrl.searchParams.set('select', 'id')
+  enrollmentUrl.searchParams.set('select', 'id,sequence_id')
   enrollmentUrl.searchParams.set('organization_id', `eq.${organizationId}`)
   enrollmentUrl.searchParams.set('contact_id', `eq.${contactId}`)
   enrollmentUrl.searchParams.set('state', 'in.(pending,active,waiting,sending,paused)')
   enrollmentUrl.searchParams.set('limit', '100')
   const enrollRes = await fetch(enrollmentUrl, { headers: serviceHeaders(env) })
   if (!enrollRes.ok) return 0
-  const enrollments = await enrollRes.json() as Array<{ id: string }>
+  const enrollments = await enrollRes.json() as Array<{ id: string; sequence_id: string }>
   if (!enrollments.length) return 0
 
   const patchUrl = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/sequence_enrollments?organization_id=eq.${organizationId}&contact_id=eq.${contactId}&state=in.(pending,active,waiting,sending,paused)`
@@ -67,6 +80,8 @@ async function stopEnrollmentsForContact(env: Env, organizationId: string, conta
       }),
     })
     if (!insertRes.ok) console.error('ACTIVITY_EVENT_FAILED', insertRes.statusText)
+
+    await notifySlack((env as unknown as { SLACK_WEBHOOK_URL?: string }).SLACK_WEBHOOK_URL, `Reply received from ${from}. Sequence paused enrollment ${enrollment.id}.`)
   }
   return enrollments.length
 }

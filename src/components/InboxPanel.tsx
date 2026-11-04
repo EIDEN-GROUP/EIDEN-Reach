@@ -175,35 +175,25 @@ export function InboxPanel({ userId, canConnect }: { userId: string; canConnect:
   }
 
   useEffect(() => {
-    console.error('INBOX_MOUNT', userId)
     let active = true
     void (async () => {
-      console.error('INBOX_QUERY_START')
       let membership
       try {
         const membershipQuery = supabase!.from('memberships').select('organization_id').eq('user_id', userId).limit(1).maybeSingle()
         const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Membership query timed out.')), 8000))
         membership = await Promise.race([membershipQuery, timeout])
       } catch (membershipError) {
-        console.error('INBOX_QUERY_FAILURE', membershipError)
         if (!active) return
         setError(membershipError instanceof Error ? membershipError.message : 'Membership could not be loaded.')
         setLoading(false)
         return
       }
       if (!active) return
-      console.error('INBOX_QUERY_RESULT', membership)
-      if (membership.error || !membership.data) {
-        setError('Your account is not assigned to a workspace.')
-        setLoading(false)
-        return
-      }
+      if (membership.error || !membership.data) { setError('Your account is not assigned to a workspace.'); setLoading(false); return }
       const orgId = membership.data.organization_id
       setOrganizationId(orgId)
       try {
-        console.error('INBOX_LOADING_MAILBOXES', orgId)
         await loadMailboxes(orgId)
-        console.error('INBOX_MAILBOXES_LOADED')
       } catch (loadError) {
         if (active) setError(mailboxError(loadError, 'Mailbox accounts could not be loaded.'))
       } finally {

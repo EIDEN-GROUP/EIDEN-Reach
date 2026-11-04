@@ -8,3 +8,4 @@ dist/
 .wrangler/
 **/.dev.vars
 supabase/.temp/
+**/.playwright-mcp/

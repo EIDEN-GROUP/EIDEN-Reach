@@ -10,14 +10,8 @@ import { mapParsedEmail } from './mail-mapping'
 import { parseMailboxInput, type MailboxInput } from './input'
 import { stopEnrollmentsForReply, reconcileReplyStoppedEnrollments } from './worker-reply'
 
-export interface Env {
-  SUPABASE_URL: string
-  SUPABASE_ANON_KEY: string
-  SUPABASE_SERVICE_ROLE_KEY: string
-  MAILBOX_ENCRYPTION_KEY: string
-  MAILBOX_ENCRYPTION_KEY_VERSION: string
-  APP_ORIGIN: string
-}
+import type { Env } from './runtime'
+import { serviceHeaders } from './runtime'
 
 type Identity = { id: string; email?: string }
 type Membership = { role: 'super_admin' | 'sales_manager' | 'sales_representative' | 'analyst' }
@@ -44,14 +38,6 @@ async function parseInput(request: Request): Promise<MailboxInput | null> {
   let value: unknown
   try { value = JSON.parse(rawText) } catch { return null }
   return parseMailboxInput(value)
-}
-
-export function serviceHeaders(env: Env, contentType = false) {
-  return {
-    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-    ...(contentType ? { 'content-type': 'application/json' } : {}),
-  }
 }
 
 async function verifyIdentity(request: Request, env: Env): Promise<Identity | null> {
@@ -290,21 +276,20 @@ async function handle(request: Request, env: Env): Promise<Response> {
             target_folder_name: inbox.name,
             target_special_use: inbox.specialUse ?? null,
             target_uid: item.uid,
-            target_thread_provider_id: item.uid,
-            target_provider_message_key: item.uid,
-            target_rfc_message_id: item.uid,
-            target_in_reply_to: null,
-            target_references: [],
-            target_subject: '',
-            target_snippet: '',
-            target_text_body: '',
-            target_html_body: '',
-            target_received_at: null,
-            target_raw_headers: {},
-            target_participants: [],
-            target_attachments: [],
+            target_thread_provider_id: mapped.threadProviderId,
+            target_provider_message_key: mapped.providerMessageKey,
+            target_rfc_message_id: mapped.message.rfc_message_id,
+            target_in_reply_to: mapped.message.in_reply_to,
+            target_references: mapped.message.references_header,
+            target_subject: mapped.message.subject,
+            target_snippet: mapped.message.snippet,
+            target_text_body: mapped.message.text_body,
+            target_html_body: mapped.message.html_body,
+            target_received_at: mapped.message.received_at,
+            target_raw_headers: mapped.message.raw_headers,
+            target_participants: mapped.participants,
+            target_attachments: mapped.attachments,
           })
-          // Reply handling would be done here but mapped data not available in RPC context
           await stopEnrollmentsForReply(env, account.organization_id, mapped.participants, mapped.message.in_reply_to, mapped.message.references_header)
           synchronizedMessages += 1
         }
@@ -324,6 +309,13 @@ async function handle(request: Request, env: Env): Promise<Response> {
         body: JSON.stringify({ last_sync_at: new Date().toISOString(), connection_state: 'connected' }),
       })
       if (!mailboxUpdate.ok) throw new Error(`mailbox_update_${mailboxUpdate.status}`)
+
+      // Reconcile any enrollments whose contacts have inbound replies that haven't been processed yet.
+      try {
+        await reconcileReplyStoppedEnrollments(env, body.organizationId, body.mailboxId)
+      } catch (reconcileError) {
+        console.error('REPLY_RECONCILE_ERROR', reconcileError)
+      }
 
       return response({
         ok: true,
