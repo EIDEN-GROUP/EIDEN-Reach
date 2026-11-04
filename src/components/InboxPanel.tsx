@@ -1,15 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import {
-  AlertTriangle,
-  Check,
-  Inbox,
-  LockKeyhole,
-  MailPlus,
-  Paperclip,
-  RefreshCw,
-  ShieldCheck,
-} from 'lucide-react'
+import { AlertTriangle, Check, Inbox, LockKeyhole, MailPlus, Paperclip, Plus, RefreshCw, ShieldCheck } from 'lucide-react'
 import {
   MailboxApiError,
   connectMailbox,
@@ -20,6 +11,7 @@ import {
   type MailboxSyncResult,
 } from '../lib/mailbox-api'
 import { supabase } from '../lib/supabase'
+import { SlideOut } from './Overlay'
 
 type MessageParticipant = {
   participant_type: 'from' | 'to' | 'cc' | 'bcc' | 'reply_to'
@@ -54,10 +46,30 @@ type StoredThread = {
   latest_message_at: string | null
 }
 
+const TONES = ['coral', 'teal', 'violet', 'amber', 'blue', 'green'] as const
+
+function toneFor(label: string) {
+  const code = label.trim().toLowerCase().charCodeAt(0) || 0
+  return TONES[code % TONES.length]
+}
+
+function initialOf(label: string) {
+  return (label.trim()[0] ?? '?').toUpperCase()
+}
+
 function formatBytes(value: number) {
   if (value < 1_024) return `${value} B`
   if (value < 1_048_576) return `${Math.round(value / 1_024)} KB`
   return `${(value / 1_048_576).toFixed(1)} MB`
+}
+
+function formatDay(value: string | null) {
+  if (!value) return ''
+  const date = new Date(value)
+  const today = new Date()
+  return date.toDateString() === today.toDateString()
+    ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleDateString([], { day: '2-digit', month: 'short' })
 }
 
 function mailboxError(error: unknown, fallback: string) {
@@ -72,6 +84,7 @@ export function InboxPanel({ userId, canConnect }: { userId: string; canConnect:
   const [bodyView, setBodyView] = useState<'text' | 'html'>('text')
   const [messages, setMessages] = useState<StoredMessage[]>([])
   const [threads, setThreads] = useState<StoredThread[]>([])
+  const [connectOpen, setConnectOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
@@ -158,17 +171,13 @@ export function InboxPanel({ userId, canConnect }: { userId: string; canConnect:
         ? current
         : loadedThreads[0]?.id ?? '')
     } catch (loadError) {
-      // Surface the underlying Supabase/PostgREST error during development without changing the production-facing message.
       if (import.meta.env.DEV) console.error('Inbox loadMessages failed', loadError)
       setThreads([])
       setMessages([])
       setSelectedThreadId('')
-      const serialized = (() => {
-        try { return JSON.stringify(loadError) } catch { return String(loadError) }
-      })()
-      const backendError = loadError as { message?: string; code?: string; details?: string } | null
-      const message = backendError?.message || (loadError instanceof Error ? loadError.message : serialized)
-      setMessageError(`Inbox conversation load failed: ${message}. Raw: ${serialized.slice(0, 500)}. Verify mailbox permissions, schema, and authorized session.`)
+      const backendError = loadError as { message?: string } | null
+      const reason = backendError?.message || (loadError instanceof Error ? loadError.message : 'unknown error')
+      setMessageError(`Conversations could not be loaded: ${reason}. Check mailbox permissions and that the database migrations are applied.`)
     } finally {
       setMessageLoading(false)
     }
@@ -287,93 +296,123 @@ export function InboxPanel({ userId, canConnect }: { userId: string; canConnect:
     }
   }
 
-  return <div className="mailbox-layout">
-    <section className="panel mailbox-panel mailbox-command-center">
-      <header className="panel-heading">
-        <div>
-          <span className="section-kicker">Shared conversation workspace</span>
-          <h2>Inbox command center</h2>
-          <p>Read synchronized conversations, inspect mailbox health, and control incremental sync.</p>
-        </div>
-        <button className="secondary-button icon-button" type="button" onClick={() => void refresh()} disabled={busy !== null || loading} aria-label="Refresh inbox">
-          <RefreshCw size={15} /> Refresh
-        </button>
-      </header>
+  const credentialsReady = serviceConfigured && Boolean(organizationId) && Boolean(email) && Boolean(password) && busy === null
 
-      {error && <p className="inline-error" role="alert">{error}</p>}
-      {syncResult && <p className="success-message" role="status"><Check size={15} />{syncResult.message}</p>}
+  return <section className="inbox-page">
+    <header className="inbox-head">
+      <div>
+        <h2>Inbox</h2>
+        <p>Read synchronized conversations from your connected mailboxes.</p>
+      </div>
+      <div className="inbox-head-actions">
+        <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={busy !== null || loading}><RefreshCw size={15} /> Refresh</button>
+        {canConnect && <button className="primary-button" type="button" onClick={() => { setConnectOpen(true); setMessage(''); setError('') }}><Plus size={15} /> Connect mailbox</button>}
+      </div>
+    </header>
 
-      {loading ? <div className="table-message">Loading mailbox workspace…</div> : mailboxes.length ? <div className="mailbox-workspace">
-        <aside className="mailbox-rail" aria-label="Connected mailboxes">
-          <div className="mailbox-rail-label">Mailboxes</div>
-          {mailboxes.map(mailbox => <button
-            className={`mailbox-account-button ${selectedMailboxId === mailbox.id ? 'active' : ''}`}
-            key={mailbox.id}
-            type="button"
-            onClick={() => setSelectedMailboxId(mailbox.id)}
-          >
-            <span className="mailbox-account-icon"><Inbox size={16} /></span>
-            <span><b>{mailbox.display_name || mailbox.email_address}</b><small>{mailbox.email_address}</small></span>
-            <i className={`health-dot ${mailbox.connection_state}`} aria-label={mailbox.connection_state.replaceAll('_', ' ')} />
-          </button>)}
-          {selectedMailbox && <div className="mailbox-rail-meta">
-            <span>{selectedMailbox.last_sync_at ? `Last sync ${new Date(selectedMailbox.last_sync_at).toLocaleString()}` : 'Never synchronized'}</span>
-            <button className="primary-button" type="button" onClick={() => void synchronize(selectedMailbox.id)} disabled={busy !== null}>
-              <RefreshCw size={14} />{busy === 'sync' ? 'Syncing…' : 'Sync inbox'}
+    {error && <p className="inline-error" role="alert">{error}</p>}
+    {syncResult && <p className="success-message" role="status"><Check size={15} />{syncResult.message}</p>}
+
+    {loading ? <div className="table-message">Loading mailboxes…</div> : mailboxes.length ? <div className="inbox-shell">
+      <aside className="inbox-rail" aria-label="Connected mailboxes">
+        <div className="inbox-rail-label">Mailboxes</div>
+        <div className="inbox-accounts">
+          {mailboxes.map(mailbox => {
+            const label = mailbox.display_name || mailbox.email_address
+            return <button key={mailbox.id} type="button" className={`inbox-account ${selectedMailboxId === mailbox.id ? 'active' : ''}`} onClick={() => setSelectedMailboxId(mailbox.id)}>
+              <span className="inbox-avatar" data-tone={toneFor(label)}>{initialOf(label)}</span>
+              <span className="inbox-account-text"><b>{label}</b><small>{mailbox.email_address}</small></span>
+              <i className={`health-dot ${mailbox.connection_state}`} aria-label={mailbox.connection_state.replaceAll('_', ' ')} />
             </button>
-
-          </div>}
-        </aside>
-
-        <div className="thread-list" aria-label="Conversation list">
-          <div className="thread-list-heading"><b>Conversations</b><span>{threads.length}</span></div>
-          {messageLoading ? <div className="table-message">Loading conversations…</div> : messageError ? <p className="inline-error" role="alert">{messageError}</p> : threads.length ? threads.map(thread => {
-            const threadMessages = messages.filter(item => item.thread_id === thread.id)
-            const latest = threadMessages[0]
-            const sender = latest?.participants?.find(participant => participant.participant_type === 'from')
-            return <button className={`thread-button ${selectedThreadId === thread.id ? 'active' : ''}`} type="button" key={thread.id} onClick={() => setSelectedThreadId(thread.id)}>
-              <span className="thread-avatar">{(sender?.display_name || sender?.email_address || '?').slice(0, 1).toUpperCase()}</span>
-              <span><b>{sender?.display_name || sender?.email_address || 'Unknown sender'}</b><strong>{thread.normalized_subject || latest?.subject || '(No subject)'}</strong><small>{latest?.snippet || 'No message preview'}</small></span>
-              <time>{thread.latest_message_at ? new Date(thread.latest_message_at).toLocaleDateString() : '—'}</time>
-            </button>
-          }) : <div className="mailbox-zero"><Inbox size={21} /><b>No synchronized conversations</b><span>Run an inbox sync to fetch the first bounded batch.</span></div>}
+          })}
         </div>
+        {selectedMailbox && <div className="inbox-rail-foot">
+          <span>{selectedMailbox.last_sync_at ? `Synced ${new Date(selectedMailbox.last_sync_at).toLocaleString()}` : 'Not synchronized yet'}</span>
+          <button className="primary-button" type="button" onClick={() => void synchronize(selectedMailbox.id)} disabled={busy !== null}><RefreshCw size={14} />{busy === 'sync' ? 'Syncing…' : 'Sync inbox'}</button>
+        </div>}
+      </aside>
 
-        <article className="conversation-reader" aria-label="Conversation reader">
-          {selectedThread ? <>
-            <header className="conversation-heading"><span className="section-kicker">Conversation</span><h3>{selectedThread.normalized_subject || '(No subject)'}</h3><p>{selectedMessages.length} message{selectedMessages.length === 1 ? '' : 's'}{selectedMessages.some(item => item.html_body) ? <button type="button" className="secondary-button" onClick={() => setBodyView(current => current === 'text' ? 'html' : 'text')}>{bodyView === 'html' ? 'Show text' : 'Show HTML'}</button> : null}</p></header>
-            <div className="conversation-stack">{selectedMessages.map(item => {
+      <div className="inbox-list" aria-label="Conversation list">
+        <div className="inbox-list-head"><b>Conversations</b><span>{threads.length}</span></div>
+        {messageLoading ? <div className="table-message">Loading conversations…</div> : messageError ? <p className="inline-error" role="alert">{messageError}</p> : threads.length ? threads.map(thread => {
+          const threadMessages = messages.filter(item => item.thread_id === thread.id)
+          const latest = threadMessages[0]
+          const sender = latest?.participants?.find(participant => participant.participant_type === 'from')
+          const senderName = sender?.display_name || sender?.email_address || 'Unknown sender'
+          return <button key={thread.id} type="button" className={`inbox-row ${selectedThreadId === thread.id ? 'active' : ''}`} onClick={() => setSelectedThreadId(thread.id)}>
+            <span className="inbox-avatar" data-tone={toneFor(senderName)}>{initialOf(senderName)}</span>
+            <span className="inbox-row-text">
+              <span className="inbox-row-top"><b>{senderName}</b><time>{formatDay(thread.latest_message_at)}</time></span>
+              <strong>{thread.normalized_subject || latest?.subject || '(No subject)'}</strong>
+              <small>{latest?.snippet || 'No preview available'}</small>
+            </span>
+          </button>
+        }) : <div className="inbox-empty-state"><Inbox size={22} /><b>No conversations yet</b><span>Run a sync to fetch the first batch of messages.</span></div>}
+      </div>
+
+      <article className="inbox-reader" aria-label="Conversation reader">
+        {selectedThread ? <>
+          <header className="inbox-reader-head">
+            <div>
+              <h3>{selectedThread.normalized_subject || '(No subject)'}</h3>
+              <p>{selectedMessages.length} message{selectedMessages.length === 1 ? '' : 's'}</p>
+            </div>
+            {selectedMessages.some(item => item.html_body) && <button type="button" className="secondary-button" onClick={() => setBodyView(current => current === 'text' ? 'html' : 'text')}>{bodyView === 'html' ? 'Plain text' : 'Formatted'}</button>}
+          </header>
+          <div className="inbox-thread">
+            {selectedMessages.map(item => {
               const sender = item.participants?.find(participant => participant.participant_type === 'from')
+              const senderName = sender?.display_name || sender?.email_address || 'Unknown sender'
               const recipients = item.participants?.filter(participant => participant.participant_type === 'to') ?? []
               const timestamp = item.received_at ?? item.sent_at
-              return <section className="message-card" key={item.id}>
-                <header><span className="thread-avatar">{(sender?.display_name || sender?.email_address || '?').slice(0, 1).toUpperCase()}</span><div><b>{sender?.display_name || sender?.email_address || 'Unknown sender'}</b><small>to {recipients.map(recipient => recipient.display_name || recipient.email_address).join(', ') || 'unknown'}</small></div><time>{timestamp ? new Date(timestamp).toLocaleString() : 'Unknown time'}</time></header>
-                <div className="message-body">{bodyView === 'html' && item.html_body ? <iframe className="message-html-body" title={`HTML view of ${item.subject || 'message'}`} sandbox="" referrerPolicy="no-referrer" srcDoc={item.html_body} /> : (item.text_body || item.snippet || '(No readable body stored)')}</div>
-                {item.attachments?.length ? <div className="attachment-list">{item.attachments.map(file => <span key={`${item.id}-${file.filename}`}><Paperclip size={13} />{file.filename}<small>{formatBytes(file.size_bytes)}</small></span>)}</div> : null}
+              return <section className="inbox-message" key={item.id}>
+                <header className="inbox-message-head">
+                  <span className="inbox-avatar" data-tone={toneFor(senderName)}>{initialOf(senderName)}</span>
+                  <div>
+                    <b>{senderName}</b>
+                    <small>to {recipients.map(recipient => recipient.display_name || recipient.email_address).join(', ') || 'unknown'}</small>
+                  </div>
+                  <time>{timestamp ? new Date(timestamp).toLocaleString() : 'Unknown time'}</time>
+                </header>
+                <div className="inbox-message-body">
+                  {bodyView === 'html' && item.html_body
+                    ? <iframe className="inbox-html" title={`HTML view of ${item.subject || 'message'}`} sandbox="" referrerPolicy="no-referrer" srcDoc={item.html_body} />
+                    : (item.text_body || item.snippet || 'No readable body is stored for this message.')}
+                </div>
+                {item.attachments?.length ? <div className="inbox-attachments">{item.attachments.map(file => <span key={`${item.id}-${file.filename}`}><Paperclip size={13} />{file.filename}<small>{formatBytes(file.size_bytes)}</small></span>)}</div> : null}
               </section>
-            })}</div>
-            <div className="composer-locked"><LockKeyhole size={16} /><div><b>Outbound composer locked</b><span>Sending stays disabled until SMTP delivery, reconciliation, and bounce handling pass production verification.</span></div><button className="primary-button" type="button" disabled>Reply</button></div>
-          </> : <div className="mailbox-zero reader-zero"><Inbox size={24} /><b>Select a conversation</b><span>The message body and attachment metadata will appear here.</span></div>}
-        </article>
-      </div> : <div className="mailbox-zero mailbox-empty-state"><MailPlus size={23} /><b>No mailbox connected</b><span>Connect a Hostinger custom-domain mailbox below to create the first inbox workspace.</span></div>}
+            })}
+          </div>
+          <footer className="inbox-composer">
+            <LockKeyhole size={15} />
+            <span><b>Replies are turned off.</b> Sending waits for delivery checks and bounce handling.</span>
+            <button className="secondary-button" type="button" disabled>Reply</button>
+          </footer>
+        </> : <div className="inbox-empty-state inbox-reader-empty"><Inbox size={24} /><b>Select a conversation</b><span>Messages and attachment details appear here.</span></div>}
+      </article>
+    </div> : <div className="inbox-empty-state inbox-first-run"><MailPlus size={24} /><b>No mailbox connected</b><span>{canConnect ? 'Connect a custom-domain mailbox to start reading conversations here.' : 'Ask a sales manager to connect a mailbox.'}</span>{canConnect && <button className="primary-button" type="button" onClick={() => setConnectOpen(true)}><Plus size={15} /> Connect mailbox</button>}</div>}
 
-      <div className="mailbox-boundary"><AlertTriangle size={15} /><span>Incremental inbound synchronization and read-only conversations are enabled. Sending, reply, draft persistence, and attachment download remain deliberately disabled.</span></div>
-    </section>
+    <div className="inbox-notice"><AlertTriangle size={15} /><span>Inbound sync and read-only conversations are live. Sending, replies, drafts and attachment downloads stay off.</span></div>
+    {!canConnect && <div className="inbox-notice"><ShieldCheck size={15} /><span>Your role can read authorized mailboxes but cannot connect new ones.</span></div>}
 
-    {canConnect && <section className="panel mailbox-panel mailbox-connect-panel">
-      <header className="panel-heading"><div><span className="section-kicker">Secure connection</span><h2>Connect another mailbox</h2><p>Credentials are verified against IMAP and SMTP before encrypted storage.</p></div></header>
-      {!serviceConfigured && <p className="inline-error" role="alert">Set <code>VITE_MAILBOX_WORKER_URL</code> to the trusted mailbox worker URL.</p>}
-      {message && <p className="success-message" role="status"><Check size={15} />{message}</p>}
-      <form className="contact-form mailbox-form" onSubmit={connect}>
+    <SlideOut open={connectOpen && canConnect} onClose={() => setConnectOpen(false)} title="Connect a mailbox" description="Credentials are checked against IMAP and SMTP before they are stored encrypted.">
+      <form className="slideout-form" onSubmit={connect}>
+        {!serviceConfigured && <p className="inline-error" role="alert">Set <code>VITE_MAILBOX_WORKER_URL</code> to the trusted mailbox worker URL.</p>}
+        {message && <p className="success-message" role="status"><Check size={15} />{message}</p>}
+        {error && <p className="inline-error" role="alert">{error}</p>}
         <label>Email address<input type="email" autoComplete="email" value={email} onChange={event => updateField(setEmail, event.target.value)} required maxLength={320} /></label>
         <label>Display name<input value={displayName} onChange={event => updateField(setDisplayName, event.target.value)} maxLength={120} placeholder="Optional" /></label>
         <label>Mailbox password<input type="password" autoComplete="new-password" value={password} onChange={event => updateField(setPassword, event.target.value)} required maxLength={1_024} /></label>
-        <div className="mailbox-server-settings"><b>Incoming IMAP</b><span>imap.hostinger.com · 993 · implicit TLS</span><b>Outgoing SMTP</b><span>smtp.hostinger.com · 465 TLS (587 STARTTLS fallback)</span></div>
-        <div className="mailbox-privacy"><LockKeyhole size={15} /><span>The worker receives this password over HTTPS and stores only an AES-GCM encrypted envelope.</span></div>
-        <div className="mailbox-actions"><button className="secondary-button" type="button" onClick={() => void runTest()} disabled={!serviceConfigured || !organizationId || !email || !password || busy !== null}>{busy === 'test' ? 'Testing…' : 'Test connection'}</button><button className="primary-button" type="submit" disabled={!serviceConfigured || !organizationId || !email || !password || !tested || busy !== null}>{busy === 'connect' ? 'Connecting…' : 'Connect mailbox'}</button></div>
+        <div className="server-card">
+          <div><b>Incoming IMAP</b><span>imap.hostinger.com · 993 · implicit TLS</span></div>
+          <div><b>Outgoing SMTP</b><span>smtp.hostinger.com · 465 TLS (587 STARTTLS fallback)</span></div>
+        </div>
+        <div className="privacy-line"><LockKeyhole size={14} /><span>The password goes to the trusted worker over HTTPS and is stored only as an AES-GCM encrypted envelope.</span></div>
+        <div className="slideout-actions">
+          <button className="secondary-button" type="button" onClick={() => void runTest()} disabled={!credentialsReady}>{busy === 'test' ? 'Testing…' : 'Test connection'}</button>
+          <button className="primary-button" type="submit" disabled={!credentialsReady || !tested}>{busy === 'connect' ? 'Connecting…' : 'Connect mailbox'}</button>
+        </div>
       </form>
-    </section>}
-
-    {!canConnect && <div className="data-note"><ShieldCheck size={15} /><span>Your role can read authorized mailbox data but cannot connect a mailbox.</span></div>}
-  </div>
+    </SlideOut>
+  </section>
 }

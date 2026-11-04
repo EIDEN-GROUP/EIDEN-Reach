@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Eye, Mail, Plus, X } from 'lucide-react'
+import { Eye, Mail, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { CenterDialog } from './Overlay'
 
 type Template = {
   id: string
@@ -142,17 +143,8 @@ export function TemplatesPanel({ userId, canWrite }: { userId: string; canWrite:
     {error && <p className="inline-error" role="alert">{error}</p>}
     {loading ? <div className="table-message">Loading templates...</div> : templates.length ? <div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>Name</th><th>Subject</th><th>Category</th><th>Action</th></tr></thead><tbody>{templates.map(template => <tr key={template.id}><td><button className="text-action" type="button" onClick={() => openEdit(template)}>{template.name}</button></td><td>{template.subject || '—'}</td><td>{template.category}</td><td>{canWrite && <button className="archive-button" type="button" onClick={() => void archive(template)}>Archive</button>}</td></tr>)}</tbody></table></div> : !error && <div className="table-message">No templates yet. {canWrite ? 'Create one above.' : 'No templates are available.'}</div>}
 
-    {modalOpen && <div className="modal-scrim" role="presentation" onClick={closeModal}>
-      <section className="modal-card template-modal" role="dialog" aria-modal="true" aria-labelledby="template-modal-title" onClick={event => event.stopPropagation()}>
-        <header className="editor-heading">
-          <div>
-            <span className="section-kicker">{editingId ? 'Edit template' : 'New template'}</span>
-            <h3 id="template-modal-title">{editingId ? 'Update email template' : 'Create email template'}</h3>
-            <p>Use personalization tags and include both plain text and HTML bodies for mailbox compatibility.</p>
-          </div>
-          <button className="secondary-button" type="button" onClick={closeModal} aria-label="Close template editor"><X size={16} /></button>
-        </header>
-        <form className="contact-form" onSubmit={save}>
+    <CenterDialog open={modalOpen} onClose={closeModal} title={editingId ? 'Update email template' : 'Create email template'} description="Use personalization tags and include both plain text and HTML bodies for mailbox compatibility.">
+        <form className="contact-form template-form" onSubmit={save}>
           <div className="template-grid">
             <label>Name<input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} required maxLength={200} /></label>
             <label>Category<select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}><option value="sales">sales</option><option value="marketing">marketing</option><option value="transactional">transactional</option></select></label>
@@ -176,12 +168,11 @@ export function TemplatesPanel({ userId, canWrite }: { userId: string; canWrite:
             <h4>{draft.subject || 'Untitled template'}</h4>
             {activeBody === 'html' && draft.htmlBody ? <iframe className="message-html-body" title="Template HTML preview" sandbox="" referrerPolicy="no-referrer" srcDoc={draft.htmlBody} /> : <pre className="template-preview-text">{draft.textBody || 'Empty message'}</pre>}
           </div>}
-          <div className="mailbox-actions">
+          <div className="form-actions">
             <button className="secondary-button" type="button" onClick={closeModal} disabled={saving}>Cancel</button>
             <button className="primary-button" type="submit" disabled={saving || !orgId}>{saving ? 'Saving...' : editingId ? 'Save template' : 'Create template'}</button>
           </div>
         </form>
-      </section>
-    </div>}
+    </CenterDialog>
   </section>
 }
