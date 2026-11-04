@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 
 type Sequence = { id: string; name: string; description: string | null; status: string; category: string; current_version: number; daily_limit: number | null; archived_at: string | null }
 type Step = { id: string; position: number; kind: string; delay_minutes: number; business_days_only: boolean; time_zone_policy: string; template_id: string | null }
+type Enrollment = { id: string; contact_id: string; state: string; enrolled_at: string; next_step_position: number; next_run_at: string | null; stopped_at: string | null; stop_reason: string | null; contacts: { first_name: string; last_name: string; email: string | null } | null }
 
 export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite: boolean }) {
   const [orgId, setOrgId] = useState('')
@@ -11,6 +12,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [steps, setSteps] = useState<Step[]>([])
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([])
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('sales')
@@ -56,6 +58,22 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     })()
     return () => { active = false }
   }, [selectedId, sequences])
+
+  useEffect(() => {
+    if (!selectedId) { setEnrollments([]); return }
+    let active = true
+    void (async () => {
+      const result = await supabase!.from('sequence_enrollments')
+        .select('id,contact_id,state,enrolled_at,next_step_position,next_run_at,stopped_at,stop_reason,contacts:contact_id(first_name,last_name,email)')
+        .eq('sequence_id', selectedId)
+        .order('enrolled_at', { ascending: false })
+        .limit(500)
+      if (!active) return
+      if (result.error) setError('Enrollments could not be loaded.')
+      else setEnrollments((result.data ?? []) as unknown as Enrollment[])
+    })()
+    return () => { active = false }
+  }, [selectedId])
 
   const selected = sequences.find(s => s.id === selectedId)
 
@@ -135,6 +153,28 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     setSaving(false)
   }
 
+  function statusClass(state: string) {
+    switch (state) {
+      case 'replied': return 'status-chip status-chip-replied'
+      case 'active': return 'status-chip status-chip-active'
+      case 'paused': return 'status-chip status-chip-paused'
+      case 'pending': return 'status-chip status-chip-pending'
+      case 'completed': return 'status-chip status-chip-completed'
+      case 'unsubscribed': return 'status-chip status-chip-unsubscribed'
+      case 'bounced': return 'status-chip status-chip-bounced'
+      default: return 'status-chip'
+    }
+  }
+
+  const enrollmentSummary = {
+    total: enrollments.length,
+    active: enrollments.filter(e => ['pending', 'active', 'waiting', 'sending'].includes(e.state)).length,
+    replied: enrollments.filter(e => e.state === 'replied').length,
+    paused: enrollments.filter(e => e.state === 'paused').length,
+    completed: enrollments.filter(e => e.state === 'completed').length,
+    stopped: enrollments.filter(e => e.stopped_at).length,
+  }
+
   return <section className="panel contacts-panel">
     <div className="panel-heading"><div><h2>Sequences</h2><p>Multi-step sales follow-up. Sending is not enabled yet.</p></div></div>
     {error && <p className="inline-error" role="alert">{error}</p>}
@@ -158,6 +198,22 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
         {canWrite && selected.status === 'draft' && <div className="contact-form"><label>Kind<select value={stepKind} onChange={e => setStepKind(e.target.value)}><option value="email">email</option><option value="wait">wait</option><option value="task">task</option><option value="condition">condition</option></select></label><label>Delay (minutes)<input inputMode="numeric" value={stepDelay} onChange={e => setStepDelay(e.target.value)} /></label><label>Business days only<input type="checkbox" checked={stepBusinessDays} onChange={e => setStepBusinessDays(e.target.checked)} /></label><label>Time zone<select value={stepTimeZonePolicy} onChange={e => setStepTimeZonePolicy(e.target.value)}><option value="contact">contact</option><option value="workspace">workspace</option><option value="utc">utc</option></select></label><label>Template<select value={stepTemplateId} onChange={e => setStepTemplateId(e.target.value)}><option value="">No template</option>{templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label><button className="primary-button" type="button" disabled={saving} onClick={() => void addStep()}>{saving ? 'Adding...' : 'Add step'}</button></div>}
         {selected.status !== 'draft' && <p>Pause this sequence and create a new version before changing its steps.</p>}
         {steps.length ? <ol>{steps.map(step => <li key={step.id}><div><b>{step.kind}</b> · delay {step.delay_minutes} min {step.business_days_only ? '· business days' : ''} · {step.time_zone_policy} {step.template_id ? `· template ${templates.find(t => t.id === step.template_id)?.name ?? step.template_id}` : ''}</div>{canWrite && selected.status === 'draft' && <button className="text-action" type="button" onClick={() => void removeStep(step)}>Delete</button>}</li>)}</ol> : <p>No steps have been added to this version.</p>}
+      </div>
+      <div className="activity-timeline"><h4>Enrollments</h4>
+        <div className="enrollment-summary">
+          <span className="status-chip status-chip-active">Active: {enrollmentSummary.active}</span>
+          <span className="status-chip status-chip-replied">Replied: {enrollmentSummary.replied}</span>
+          <span className="status-chip status-chip-paused">Paused: {enrollmentSummary.paused}</span>
+          <span className="status-chip status-chip-completed">Completed: {enrollmentSummary.completed}</span>
+          <span className="status-chip">Total: {enrollmentSummary.total}</span>
+        </div>
+        {enrollments.length ? <div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>Contact</th><th>State</th><th>Enrolled</th><th>Next run</th><th>Stop reason</th></tr></thead><tbody>{enrollments.map(enrollment => {
+          const contact = enrollment.contacts
+          const contactName = contact ? `${contact.first_name} ${contact.last_name}`.trim() : 'Unknown'
+          const nextRun = enrollment.next_run_at ? new Date(enrollment.next_run_at).toLocaleString() : '—'
+          const enrolledAt = new Date(enrollment.enrolled_at).toLocaleString()
+          return <tr key={enrollment.id}><td><b>{contactName}</b><br/><small>{contact?.email ?? '—'}</small></td><td><span className={statusClass(enrollment.state)}>{enrollment.state.replace('_', ' ')}</span></td><td>{enrolledAt}</td><td>{nextRun}</td><td>{enrollment.stop_reason ?? '—'}</td></tr>
+        })}</tbody></table></div> : <p>No contacts enrolled yet.</p>}
       </div>
     </section>}
   </section>

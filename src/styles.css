@@ -270,7 +270,16 @@ code, kbd { font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
 .message-card header b { font-size: 11px; }
 .message-card header small, .message-card header time { color: var(--muted); font-size: 9px; }
 .message-body { padding: 13px 4px 3px 39px; color: #33433c; font-family: Georgia, serif; font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
-.message-html-body { width: 100%; min-height: 320px; border: 1px solid var(--border, #e1e7e2); border-radius: 8px; background: #fff; }
+.message-html-body { width: 100%; min-height: 320px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.enrollment-summary { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+.status-chip { padding:3px 8px; border-radius:999px; font-size:12px; font-weight:600; border:1px solid var(--line); background:var(--surface-raised); color:var(--ink); }
+.status-chip-active { background:#e6f4ec; color:#1f6f4c; border-color:#bcdfcb; }
+.status-chip-replied { background:#e8f1fb; color:#1d4d91; border-color:#bcd0f5; }
+.status-chip-paused { background:#fff4e5; color:#8b4d00; border-color:#f7d8a8; }
+.status-chip-pending { background:#eef0f6; color:#3b4263; border-color:#d1d6e1; }
+.status-chip-completed { background:#efeff0; color:#3a3a3c; border-color:#d9d9dc; }
+.status-chip-unsubscribed { background:#fbe9e8; color:#7a2a22; border-color:#f3c4bf; }
+.status-chip-bounced { background:#f1e9fb; color:#4b2c7a; border-color:#d6bbef; }
 .attachment-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 0 0 39px; }
 .attachment-list > span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; color: #40534a; background: #f4f6f1; border: 1px solid var(--line); border-radius: 6px; font-size: 9px; }
 .attachment-list small { color: var(--muted); }
