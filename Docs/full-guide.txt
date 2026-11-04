@@ -1,0 +1,873 @@
+Email Sequences — Complete Guide for EIDEN Reach
+An email sequence is an automated, scheduled series of emails sent to a specific contact over a period of time. Its purpose is to turn a new prospect into a conversation, a qualified opportunity, and eventually a customer.
+
+Instead of manually remembering to email someone every few days, you create a sequence once, enroll contacts, and let the system manage the timing and follow-ups.
+
+Think of it as a structured sales follow-up process:
+1. Find a potential customer.
+2. Send an introductory email.
+3. Wait a defined number of days.
+4. Send a follow-up if they haven't replied.
+5. Continue with relevant follow-ups.
+6. Stop automatically when they reply, unsubscribe, bounce, or otherwise become ineligible.
+7. Move interested prospects into the sales pipeline for a human to handle.
+Important distinction: An email sequence is not simply a bulk email campaign. A good sequence is contact-based, conditional, personalized, and designed to stop when the prospect responds or should no longer be contacted.
+1. How a sequence works, from beginning to end
+A sequence has three main parts:
+- The sequence: The reusable plan containing emails, delays, conditions, and tasks.
+- The contact enrollment: One particular person's progress through that plan.
+- The execution engine: The background system that checks which action is due and performs it.
+For example, imagine EIDEN Reach has a sequence called New B2B Prospect — Introduction.
+
+You enroll 100 eligible prospects. Each prospect gets their own independent timeline. If one replies on Day 2, that person's sequence stops, while the other 99 can continue.
+Example: one prospect's journey
+1. Day 1 — Initial email
+   
+   Introduce EIDEN, explain why you're contacting them, and ask a simple question.
+2. Day 4 — Follow-up 1
+   
+   Follow up on the original message with a little more context.
+3. Day 8 — Follow-up 2
+   
+   Share a relevant benefit, example, or business problem you can help solve.
+4. Day 13 — Follow-up 3
+   
+   Address a possible objection and make the next step easy.
+5. Day 20 — Final follow-up
+   
+   Politely close the loop and give the prospect an easy way to respond.
+6. After Day 20 — Completed
+   
+   No more scheduled emails. The contact is marked as completed, unless they have already exited for another reason.
+
+Total sequence duration
+20 days
+
+The example uses calendar-day offsets from enrollment, with sending restricted to the configured business-hour schedule. The actual send may happen later if a sending window or daily limit prevents it.
+
+The sequence does not necessarily send every email on the exact calendar date. It first waits for the configured delay, then checks whether the contact is still eligible and whether the sending schedule allows the email to go out. Apollo documents this distinction between minimum wait time and the next available sending window. 
+Apollo+1
+
+2. How many days should an email sequence last?
+There is no universal duration. It depends on the product, audience, sales cycle, and how much contact is appropriate. For a typical B2B prospecting sequence, I recommend starting with 20–21 days, rather than sending many emails over a very short period.
+
+Here are useful starting points:
+Sequence type	Suggested duration	Email count
+Quick introduction	7–10 days	3
+Standard B2B outreach	20–21 days	5
+Detailed B2B prospecting	28–30 days	6
+High-value enterprise prospecting	30–45 days	5–7
+Long-term nurturing	60–90 days	4–8, spaced out
+
+These are recommended starting configurations, not guaranteed industry benchmarks.
+
+My recommendation for EIDEN Reach: Make 21 days the standard template, allow users to create 7-, 14-, 30-, and 45-day sequences, and let them customize every delay.
+
+A sequence should not continue indefinitely. When it finishes, the contact should enter a clear state such as Completed, No Response, or Ready for Future Follow-up. A future re-engagement should be a deliberate new workflow, not an endless continuation of the original sequence.
+3. The five-email sequence, explained in detail
+This is a practical default sequence for contacting a new B2B prospect.
+Email 1 — Introduction
+Day 1
+
+Purpose: Make a relevant first impression.
+
+What it should contain:
+- A personalized greeting.
+- A short reason for contacting this person.
+- A relevant problem, need, or opportunity.
+- A concise explanation of what you offer.
+- One simple question or call to action.
+Example subject: A possible opportunity for 
+
+Email 2 — First follow-up
+Day 4
+
+Purpose: Bring the first email back to the prospect's attention.
+
+What it should contain:
+- A brief reference to your previous email.
+- One additional reason your offer may be relevant.
+- A low-pressure question.
+Example subject: Re: A possible opportunity for 
+
+Email 3 — Value proposition
+Day 8
+
+Purpose: Give the prospect a reason to consider your offer.
+
+What it should contain:
+- A concrete benefit.
+- A relevant use case or example.
+- A clear explanation of the possible value.
+- A simple invitation to discuss it.
+Example subject: An idea for 
+
+Email 4 — Objection handling
+Day 13
+
+Purpose: Address hesitation without being pushy.
+
+What it should contain:
+- Acknowledge that the timing may not be right.
+- Clarify a potential concern.
+- Offer an alternative or smaller next step.
+- Ask whether the topic is relevant.
+Example subject: Is this something you're considering?
+
+Email 5 — Final follow-up
+Day 20
+
+Purpose: Close the conversation respectfully.
+
+What it should contain:
+- A short final note.
+- A reminder of the original reason for contacting them.
+- An easy way to say yes, no, or not right now.
+- A clear indication that you won't keep following up.
+Example subject: Should I close this for now?
+
+These should be five distinct messages with different purposes—not five copies of the same email with different wording. Follow-ups should normally stay in the same email thread by using the original subject and conversation headers.
+4. Delays and scheduling: how the days are calculated
+A delay is the minimum amount of time the system waits before making the next step eligible.
+
+For example:
+Step	Wait after previous step	Target day
+Email 1	Immediately	Day 1
+Email 2	3 days	Day 4
+Email 3	4 days	Day 8
+Email 4	5 days	Day 13
+Email 5	7 days	Day 20
+
+The delay should be configurable as:
+- Minutes or hours, for special workflows.
+- Calendar days, counting weekends.
+- Business days, excluding weekends and configured holidays.
+- An exact date and time, for special scheduled outreach.
+The interface should make the difference obvious. For example, Wait 3 calendar days is not the same as Wait 3 business days.
+
+Recommended sending schedule:
+- Monday–Friday.
+- 09:00–17:00 in the recipient's local time zone where known.
+- Avoid weekends and configured holidays.
+- Allow the user to choose a different schedule.
+- If the scheduled time passes outside the allowed window, queue the email for the next allowed window.
+For example, if a step becomes eligible on Saturday, the system should hold it until Monday morning rather than sending on Saturday.
+
+Apollo uses the same general principle: the wait time makes a step eligible, but sending windows, holidays, and mailbox limits can postpone the actual send. 
+Apollo
+
+5. What happens when a prospect responds?
+This is one of the most important parts of a sequence system.
+
+The system must monitor incoming email and decide whether a message is a genuine reply, an automated response, or something else.
+Incoming event	Recommended behavior
+Positive reply	Stop sequence; mark Interested
+Negative reply	Stop sequence; mark Not Interested
+Request for information	Stop sequence; create follow-up task
+Meeting booked	Stop sequence; mark Meeting Booked
+Out-of-office response	Pause sequence temporarily
+Unsubscribe request	Stop sequence; add to suppression list
+Hard bounce	Stop sequence; mark Invalid Email
+Complaint	Stop sequence; suppress contact
+No response	Continue to next scheduled step
+
+A. Positive reply
+Example: "Yes, I'd be interested in learning more."
+
+The system should:
+1. Detect the incoming reply.
+2. Match it to the original contact and email thread.
+3. Stop all future automated steps for that contact.
+4. Mark the contact as Interested.
+5. Create a CRM activity containing the reply.
+6. Notify the assigned sales employee.
+7. Optionally create a task to respond.
+The salesperson takes over the conversation.
+B. Negative reply
+Example: "Thanks, but we're not interested."
+
+The system should:
+1. Stop the sequence.
+2. Mark the contact Not Interested.
+3. Record the reason if available.
+4. Prevent accidental re-enrollment into the same outreach.
+5. Apply any relevant suppression rule.
+C. Out-of-office reply
+Example: "I'm away until November 15."
+
+This should not be treated as genuine interest or a normal reply.
+
+Instead:
+1. Detect the automatic reply.
+2. Pause the contact.
+3. Save the detected return date.
+4. Resume after the return date, if appropriate.
+5. Recalculate the next eligible step.
+If no return date can be detected, the contact should remain paused for manual review.
+
+Apollo documents automatic out-of-office detection and pausing, including the possibility of resuming based on a detected return date. 
+Apollo+1
+
+D. No reply
+If no qualifying reply or stop event occurs, the contact continues to the next step.
+
+However, before every send, the system must check again that the contact is still eligible. A person could have replied to a separate email, unsubscribed, or been manually removed since the previous step.
+E. Reply from another person at the same company
+This is an important advanced rule.
+
+Imagine you contact two people at the same company. One replies and says they are handling the matter.
+
+You may want to stop outreach to both contacts, not just the person who replied.
+
+EIDEN Reach should support two options:
+- Contact-level stop: Stop only the person who replied.
+- Company-level stop: Stop all active enrollments associated with that company.
+This should be configurable per sequence. 
+knowledge.hubspot.com+1
+
+6. Types of steps inside a sequence
+A professional sequence builder should support more than just automated emails.
+Step type	What it does	Automatic?
+Automated email	Sends a preconfigured email	Yes
+Manual email	Creates a task for an employee to send an email	No
+Wait / delay	Waits a specified duration	Yes
+Wait for reply	Waits for a qualifying response	Yes
+Call task	Reminds an employee to call	No
+LinkedIn task	Reminds an employee to perform a LinkedIn action	No
+General task	Creates a custom CRM task	Depends
+Conditional branch	Sends the contact down a path based on a condition	Yes
+Update CRM	Changes contact or company fields	Yes
+Create opportunity	Creates a sales opportunity	Yes
+End sequence	Finishes the contact's journey	Yes
+
+Apollo also supports combining automated email steps with manual activities such as calls and LinkedIn tasks. 
+Apollo+1
+
+Example of a conditional sequence
+Suppose the third email is sent, and the system waits four days for a reply.
+Send Email 1
+
+Introduction — Day 1
+
+
+Wait 4 days
+
+Monitor incoming messages
+
+
+Did the prospect reply?
+
+Yes
+Stop sequence
+
+Create CRM activity, notify sales employee and classify reply
+
+
+No
+Continue
+
+Send next eligible follow-up
+
+
+
+
+A more advanced sequence could also branch based on:
+- Whether the prospect opened an email (if reliable tracking is enabled).
+- Whether a meeting was booked.
+- Whether the contact belongs to a particular industry.
+- Whether the company has a particular CRM stage.
+- Whether the prospect has a valid email address.
+- Whether the contact has already been contacted by another sequence.
+Branches should never override suppression, unsubscribe, or other mandatory stop conditions.
+7. Personalization: how emails become unique for each prospect
+Sequences should support dynamic variables, also known as merge fields.
+
+For example, you write one template:
+Hi {{first_name}},
+
+I came across {{company_name}} and wanted to reach out because I believe there may be an opportunity to help your team with {{personalized_reason}}.
+
+We work with businesses to {{value_proposition}}.
+
+Would you be open to a short conversation?
+
+Best regards,
+{{sender_name}}
+{{sender_company}}
+
+
+
+
+The system replaces the variables for each contact.
+Variable	Example value
+{{first_name}}	Sarah
+{{last_name}}	Smith
+{{full_name}}	Sarah Smith
+{{company_name}}	ABC Group
+{{job_title}}	Operations Manager
+{{industry}}	Manufacturing
+{{website}}	abcgroup.com
+{{sender_name}}	Your employee's name
+{{sender_email}}	Employee's email
+{{sender_company}}	EIDEN
+{{personalized_reason}}	A relevant business opportunity
+
+Important personalization rules
+- If a variable is empty, do not send an email containing Hi ,.
+- Provide a fallback value where appropriate, such as Hello there.
+- Validate the final email before sending.
+- Allow employees to preview the rendered email for each prospect.
+- Support custom fields, not only predefined fields.
+- Store the final rendered email content in the activity history.
+- Never allow untrusted imported data to inject HTML or malicious content into an email.
+The system should also allow AI-assisted personalization. AI can generate an individual opening sentence or explain why a company might benefit from the offer. However, the generated text should be reviewed or governed by the user's configured approval policy.
+8. How contacts enter a sequence
+This is called enrollment.
+
+There are several ways to enroll contacts:
+1. Manually from a contact profile.
+2. Select multiple contacts from the CRM.
+3. Import contacts using CSV.
+4. Select a saved contact list.
+5. Enroll contacts from a company profile.
+6. Enroll contacts through a CRM workflow.
+7. Use an approved API or integration.
+Before enrollment, the system should run an eligibility check.
+Enrollment checks
+Check	Expected behavior
+Email exists	Required
+Email format is valid	Required
+Contact is unsubscribed	Block
+Email previously hard-bounced	Block
+Contact is suppressed	Block
+Contact is already enrolled in this sequence	Warn or block
+Contact is in another active sequence	Warn or apply conflict rules
+Contact is marked Not Interested	Block unless explicitly permitted
+Company is already a customer	Apply configured exclusion
+Contact has an assigned owner	Assign sender according to rules
+Required personalization fields missing	Warn or require correction
+
+Important: Enrollment is not the same as sending. A contact can be enrolled but still be paused, waiting, or blocked from sending.
+Duplicate enrollment protection
+EIDEN Reach should prevent a prospect from receiving the same outreach twice accidentally.
+
+For example, if an employee imports a CSV containing 500 contacts and 80 are already enrolled, the system should identify those 80 before enrollment and let the employee review the result.
+
+It should also prevent multiple employees from unknowingly enrolling the same person into conflicting sequences.
+9. Contact statuses and what each one means
+Every enrolled contact needs an individual status.
+Status	Meaning
+Draft	Not yet activated or scheduled
+Scheduled	Enrolled and waiting for the first step
+Active	Currently progressing
+Waiting	Waiting for a delay to expire
+Waiting for Reply	Waiting for a response before continuing
+Paused	Temporarily stopped
+Replied	A genuine reply was received
+Interested	Classified as a positive prospect
+Meeting Booked	Meeting successfully scheduled
+Not Interested	Prospect declined
+Bounced	Email could not be delivered
+Unsubscribed	Prospect opted out
+Suppressed	Blocked from further outreach
+Failed	A technical error prevented execution
+Completed	All planned steps finished
+Manually Removed	Employee removed the contact
+
+A useful distinction:
+- Paused means the contact may continue later.
+- Completed means the planned sequence has ended.
+- Unsubscribed means they must not receive further marketing or outreach covered by that opt-out.
+- Suppressed means the system must prevent sending according to the applicable suppression rule.
+These statuses must be stored separately from the contact's CRM sales status. A contact can be Interested in a sequence while still being a Lead in the CRM.
+10. How sending actually works behind the scenes
+This is where a sequence engine becomes a real production system rather than just a scheduler.
+The sending lifecycle
+1. Enrollment
+   
+   Save the contact's enrollment, sequence version, starting step, sender mailbox, and initial scheduled time.
+2. Background scheduler
+   
+   Periodically finds contacts whose next step is due.
+3. Eligibility validation
+   
+   Checks unsubscribe, suppression, reply, bounce, pause, company rules, and mailbox status.
+4. Personalization
+   
+   Generates the final email using the contact and sender information.
+5. Sending
+   
+   Submits the email through the configured sending provider.
+6. Confirmation and activity
+   
+   Stores the provider response, message identifiers, sending timestamp, and CRM activity.
+7. Schedule next step
+   
+   Calculates the next eligible date and queues the next action.
+
+The most important technical distinction: queued versus sent versus delivered
+These are three different things:
+- Queued: The system has scheduled the email.
+- Accepted: The email provider or receiving server has accepted the message for processing.
+- Delivered: The receiving mail system has accepted it into the recipient's mailbox infrastructure.
+Even delivered does not mean it landed in the primary inbox. It could be in spam, promotions, or another folder.
+
+EIDEN Reach must never display Delivered to Inbox just because an SMTP server accepted the message.
+What if sending fails?
+A robust engine needs retry rules.
+Failure	Recommended action
+Temporary server error	Retry with backoff
+Provider rate limit	Wait until allowed
+Mailbox authentication expired	Pause that mailbox and alert administrator
+Invalid recipient	Mark bounced or invalid
+Permanent rejection	Do not retry indefinitely
+Network timeout	Reconcile provider state before retrying
+Duplicate-send risk	Check idempotency key before retry
+
+The timeout case is particularly important. The email may have been accepted even though EIDEN Reach did not receive confirmation. Retrying blindly could send the same email twice.
+What happens if an employee pauses a sequence?
+Pausing the sequence should stop new automated sends across all its active enrollments.
+
+Already sent emails remain sent. Upcoming steps remain saved and should resume according to the configured resume policy.
+
+Pausing one contact should only affect that contact.
+
+Unenrolling a contact should cancel future scheduled steps, not undo messages already sent. This matches the behavior documented by HubSpot. 
+knowledge.hubspot.com
+
+11. Email tracking and sequence analytics
+A professional sequence system should show what happened at every step, not just how many emails were sent.
+A. Email metrics
+Metric	What it measures
+Enrolled contacts	Number of contacts added
+Emails scheduled	Emails waiting to be sent
+Emails sent	Successfully submitted by the sending system
+Accepted	Messages accepted by the sending provider
+Delivered	Messages reported as delivered
+Bounced	Messages that failed delivery
+Opens	Recorded email opens, when tracking is enabled
+Clicks	Recorded link clicks
+Replies	Contacts who sent genuine responses
+Positive replies	Replies classified as interested
+Meetings booked	Meetings attributed to outreach
+Unsubscribes	Contacts who opted out
+Completion rate	Contacts who reached the end
+Failure rate	Failed sends or execution errors
+
+B. Useful formulas
+Reply rate
+\[
+\text{Reply Rate} =
+\frac{\text{Unique Contacts Who Replied}}
+{\text{Eligible Contacts Contacted}}\times100
+\]
+
+Positive reply rate
+\[
+\text{Positive Reply Rate} =
+\frac{\text{Unique Positive Replies}}
+{\text{Eligible Contacts Contacted}}\times100
+\]
+
+Bounce rate
+\[
+\text{Bounce Rate} =
+\frac{\text{Bounced Emails}}
+{\text{Emails Sent}}\times100
+\]
+
+Meeting conversion rate
+\[
+\text{Meeting Rate} =
+\frac{\text{Contacts Who Booked Meetings}}
+{\text{Eligible Contacts Contacted}}\times100
+\]
+
+Use unique contacts for contact-based metrics so that one person replying to three emails doesn't count as three different replies.
+C. Sequence performance dashboard
+The sequence dashboard should display:
+Enrolled contacts
+1,250
+Illustrative data
+
+
+Emails sent
+4,380
+Illustrative data
+
+
+Reply rate
+8.4%
+Illustrative data
+
+
+Meetings booked
+32
+Illustrative data
+
+
+
+It should also show:
+- Performance by individual email step.
+- Performance by sequence.
+- Performance by employee and sending mailbox.
+- Performance by company, industry, and contact source.
+- Positive versus negative replies.
+- Bounce and unsubscribe trends.
+- Contacts currently waiting, scheduled, paused, and completed.
+- A timeline of all email activity.
+- Comparison between different subject lines and email versions.
+D. A/B testing
+A/B testing lets you compare different versions of the same email.
+
+For example:
+Version A	Version B
+Subject: An idea for your company	Subject: Improving your sales process
+Short introduction	More personalized introduction
+General value proposition	Specific business benefit
+
+You split eligible recipients between the two versions and compare their results.
+
+The system should:
+1. Assign contacts to a version consistently.
+2. Keep the assignment throughout the test.
+3. Track each version separately.
+4. Compare meaningful results such as replies and positive replies.
+5. Avoid choosing a winner based on opens alone.
+Do not change the message halfway through a test without recording a new version.
+12. Sending mailbox management
+A sequence needs a sender mailbox.
+
+For example, EIDEN Reach might have:
+- sales@eiden-group.com
+- contact@eiden-group.com
+- employee1@eiden-group.com
+- employee2@eiden-group.com
+The user should be able to select which mailbox sends each sequence.
+Mailbox configuration
+Each connected mailbox should have:
+- Sender name.
+- Email address.
+- Provider.
+- Authentication status.
+- Sending limits.
+- Daily and hourly usage.
+- Connection health.
+- Last successful send.
+- Last synchronization time.
+- Reply synchronization status.
+- Error logs.
+- Assigned employee or team.
+Mailbox rotation
+If an organization has multiple approved sending mailboxes, the system can distribute eligible emails across them.
+
+For example:
+Mailbox	Daily configured limit	Assigned sends
+Sales mailbox A	30	20
+Sales mailbox B	30	18
+Sales mailbox C	30	22
+
+These figures are just illustrative configuration values, not recommendations for safe sending volumes.
+
+Rotation must respect provider limits, mailbox ownership, authentication, sender reputation, and applicable sending policies. It must not be used to evade sending restrictions or spam protections.
+
+Important for EIDEN Reach: Connecting a mailbox through IMAP/SMTP does not automatically mean it is ready for full sequence execution. The system also needs reliable outbound sending, inbound synchronization, reply matching, and delivery/bounce processing.
+13. What happens when someone books a meeting or becomes a customer?
+Sequences should be connected to the CRM.
+
+For example:
+Event	CRM action
+Prospect enrolled	Log sequence enrollment
+First email sent	Add email activity
+Prospect replies	Add reply activity
+Prospect interested	Update contact status
+Meeting booked	Create meeting and update pipeline
+Opportunity created	Associate contact and company
+Deal won	Stop all prospecting sequences
+Contact unsubscribes	Add to suppression list
+Sequence completed	Log completion
+
+This is how an email sequence becomes part of a complete sales process instead of a separate email automation tool.
+Recommended CRM workflow
+Lead
+
+Contact is identified and qualified
+
+
+Sequence
+
+Automated prospecting and follow-ups
+
+
+Interested
+Sales follow-up
+
+Employee takes over
+
+
+No response
+Completed
+
+End of sequence
+
+
+
+
+Opportunity / Deal
+
+Qualified sales opportunity
+
+
+Won / Customer
+
+Customer onboarding and retention
+
+
+14. Deliverability, spam protection, and compliance
+This part is essential. A technically successful email send does not mean the email will reach the inbox.
+A. Domain authentication
+Sending domains should be configured correctly:
+- SPF: Identifies authorized sending servers.
+- DKIM: Cryptographically signs outgoing messages.
+- DMARC: Defines how receiving systems handle authentication failures and provides reporting.
+- TLS: Encrypts email transmission where supported.
+- DNS alignment: Ensure the visible sender domain aligns with authenticated sending infrastructure.
+Google publishes specific sender requirements, including authentication and unsubscribe requirements for qualifying bulk senders. Apollo sequence overview is about sequence operation; for Google's current requirements, see Google email sender guidelines.
+B. Unsubscribe and suppression
+EIDEN Reach should maintain a central suppression list.
+
+A contact should not receive another eligible marketing or prospecting email after a valid opt-out.
+
+The system should support:
+- Visible unsubscribe link where required.
+- One-click unsubscribe headers where applicable.
+- Global suppression across sequences.
+- Contact-specific and company-specific suppression rules.
+- Permanent records of the opt-out event.
+- Protection against accidental re-enrollment.
+- A process for handling objections and complaints.
+A suppression list should take priority over every sequence rule.
+C. Bounce management
+Two important bounce types:
+- Hard bounce: The address is invalid or permanently undeliverable. Suppress it.
+- Soft bounce: A temporary delivery problem. Record it and apply a limited retry policy where appropriate.
+Repeated temporary failures should eventually trigger a pause or review.
+D. Responsible outreach
+For cold B2B outreach, the organization must determine which legal requirements apply based on the sender's location, recipient's location, recipient type, and nature of the communication.
+
+For EIDEN Reach, I recommend:
+- Store the contact source and date obtained.
+- Record the lawful basis or permission status where relevant.
+- Identify the sender and organization honestly.
+- Use relevant and truthful subject lines.
+- Provide a practical way to object or unsubscribe.
+- Respect suppression requests across the entire platform.
+- Avoid purchased, scraped, or unverified lists without proper review.
+- Apply appropriate data-retention and privacy policies.
+Do not treat a prospect's business email address as automatic permission for every kind of marketing.
+
+Provider warning: The sending provider's terms matter just as much as the technical setup. Your EIDEN Reach repository's mailbox design should not be treated as permission to send unsolicited campaigns through any connected SMTP account. In particular, verify Hostinger's policy before using Hostinger mailboxes for cold prospecting; its policy restricts mass mailing. Hostinger mass mailing policy.
+15. How I would structure Email Sequences inside EIDEN Reach
+Based on the existing EIDEN Reach architecture and its CRM, mailbox, campaign, and background-job foundations, I would organize the feature like this.
+EIDEN Reach — Sequences
+Suggested product structure
+Overview
+
+Performance, active enrollments, replies, meetings and health
+
+
+Sequence Builder
+
+Create, edit, organize and activate sequences
+
+
+Contacts
+
+Enrollments, status, progress and bulk actions
+
+
+Email Templates
+
+Reusable templates, variables and AI assistance
+
+
+Tasks & Schedule
+
+Delays, sending windows, holidays and manual tasks
+
+
+Analytics
+
+Step performance, conversions and comparisons
+
+
+Replies
+
+Incoming replies, classification and assignments
+
+
+Deliverability
+
+Mailbox health, bounces, suppression and compliance
+
+
+
+
+A. Sequence builder
+The builder should be visual and easy to use.
+
+An employee should be able to:
+1. Create a sequence.
+2. Name it and describe its objective.
+3. Select the target audience.
+4. Add steps using a visual timeline.
+5. Configure delays.
+6. Create email content.
+7. Add personalization variables.
+8. Add conditional branches.
+9. Configure reply and meeting rules.
+10. Select a sending schedule.
+11. Preview the entire sequence.
+12. Test it using an internal email address.
+13. Activate it.
+It should support saving as a draft, duplicating, archiving, and versioning.
+B. Sequence settings
+Every sequence should have its own settings:
+Setting	Description
+Sequence name	Name displayed to employees
+Objective	What the sequence is trying to achieve
+Duration	Total planned duration
+Steps	Number and type of actions
+Sender	Mailbox or sender-selection rule
+Daily limit	Maximum permitted sequence sends
+Sending days	Days of the week
+Sending hours	Allowed sending window
+Time zone	Recipient or configured time zone
+Reply behavior	Stop, pause, or apply a custom rule
+OOO behavior	Pause and optionally resume
+Meeting behavior	Stop when a meeting is booked
+Company rules	Stop other contacts at the same company
+Unsubscribe	Apply global suppression
+Owner	Responsible employee
+Approval	Whether activation requires approval
+
+C. Contact-level progress screen
+Every contact should have a detailed progress view:
+- Current sequence.
+- Current step.
+- Enrollment date.
+- Last email sent.
+- Next scheduled action.
+- Current status.
+- Assigned sender.
+- Email history.
+- Reply history.
+- CRM activity history.
+- Pause, resume, skip, and remove actions.
+- Reason for any failure or stop.
+The employee should be able to see exactly why an email is scheduled, delayed, skipped, or blocked.
+D. Global controls
+Administrators need controls for:
+- Pause all sequence sending.
+- Pause a particular sequence.
+- Pause an individual mailbox.
+- Set global sending limits.
+- Manage suppression lists.
+- Review failed jobs.
+- Review audit logs.
+- Approve or reject new sequences.
+- View team performance.
+The global pause must prevent new sends from being initiated, including sends already queued but not yet submitted.
+16. The technical foundation EIDEN Reach needs
+The existing repository already has a foundation for sequences/campaigns, mailbox credentials, a mailbox Worker, and a durable job dispatcher. The remaining work is to make these parts operate as a complete, reliable system.
+
+I would divide the implementation into these services:
+Service	Responsibility
+Sequence Service	Create and manage sequence definitions
+Enrollment Service	Enroll contacts and track individual progress
+Scheduling Engine	Calculate when each step becomes eligible
+Job Dispatcher	Queue and dispatch due actions
+Email Execution Service	Render and submit emails
+Mailbox Sync Service	Synchronize incoming and outgoing messages
+Reply Detection Service	Match replies and identify automated responses
+CRM Integration Service	Update contacts, companies, deals and activities
+Deliverability Service	Handle bounces, suppressions and provider events
+Analytics Service	Calculate sequence and step performance
+Audit Service	Track user and system actions
+
+Important engineering requirements
+- Every enrollment must have its own state and current step.
+- Every sequence must have a version.
+- Changes to a sequence must not silently rewrite the history of contacts already enrolled.
+- Each scheduled job needs an idempotency key.
+- Database transactions must protect concurrent updates.
+- Only one worker should be able to claim a particular due action.
+- Failed jobs need bounded retries and dead-letter handling.
+- The system must reconcile uncertain send outcomes before retrying.
+- Replies and bounce events must be processed reliably.
+- Every send and stop decision must be auditable.
+- The system must re-check suppression and eligibility immediately before sending.
+- All times must be stored consistently and displayed in the appropriate time zone.
+Cloudflare Workers, Supabase, and the current job-dispatcher design can be part of this architecture, but the actual IMAP/SMTP execution model needs to be tested against the provider and runtime. A mailbox connection test alone does not prove that a complete production sequence engine works.
+
+17. Recommended ready-to-use EIDEN Reach sequence templates
+These are sensible initial templates to include in the product.
+Template	Duration	Emails	Purpose
+Quick Introduction	7 days	3	Short first contact
+Standard B2B Outreach	20 days	5	General prospecting
+Professional Sales Outreach	30 days	6	More detailed sales approach
+Enterprise Outreach	45 days	7	High-value business prospects
+Re-engagement	14 days	3	Previously contacted prospects, where permitted
+Event Follow-up	10 days	3	Follow-up after an event or meeting
+Demo Follow-up	7 days	3	Follow-up after a product demonstration
+Proposal Follow-up	14 days	4	Follow-up on a sent quotation or proposal
+
+These templates should be editable, and their durations should be calculated from the actual delays between steps, not simply from the template's name.
+18. Final recommended default configuration
+Standard B2B Outreach
+Recommended default
+5 emails
+20 days
+
+Day 1	Introduction	Send
+Day 4	First follow-up	Send
+Day 8	Value proposition	Send
+Day 13	Objection handling	Send
+Day 20	Final follow-up	Send
+
+
+Automation rules
+- Stop on genuine reply.
+- Stop on unsubscribe or complaint.
+- Stop on hard bounce.
+- Stop on meeting booked.
+- Pause on detected out-of-office.
+- Stop or pause other contacts at the same company according to settings.
+- Stop on customer conversion.
+- Do not send outside allowed sending hours.
+- Do not send if the mailbox is unhealthy or the contact is suppressed.
+- Create a CRM activity for every outgoing and incoming message.
+- Alert the assigned employee when a positive reply arrives.
+
+19. What makes a good sequence versus a bad one?
+Good sequence	Bad sequence
+Relevant to the prospect	Generic messages to everyone
+Different purpose per email	Same email repeatedly
+Reasonable spacing	Too many emails in a short time
+Stops on replies	Keeps emailing after a reply
+Respects opt-outs	Continues contacting unsubscribed people
+Tracks actual outcomes	Only counts emails sent
+Uses verified contact data	Sends to unverified lists
+Uses controlled sending limits	Sends as much as possible
+Has clear ownership	Nobody handles interested replies
+Records all activities	No history or audit trail
+
+The most important concept: The goal of an email sequence is not to send the maximum number of emails. It is to create relevant conversations, identify interested prospects, and move them into the sales process while automatically preventing inappropriate or unnecessary follow-ups.
+
+For EIDEN Reach, I would make the 20-day, five-email B2B sequence the default, with a visual builder, individual contact timelines, automated reply detection, CRM integration, and strict suppression controls. That gives you the foundation of a serious sales engagement platform rather than a simple bulk email sender.
+Further documentation
+- Apollo — Sequences overview
+- Apollo — Creating a sequence
+- Apollo — Sequence sending schedules
+- HubSpot — Automatic and manual unenrollment
+- Google — Email sender guidelines

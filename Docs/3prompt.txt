@@ -1,0 +1,276 @@
+# EIDEN Reach — Repository-Specific Email System Completion
+
+You are working directly in the existing public repository:
+
+https://github.com/EIDEN-GROUP/EIDEN-Reach
+
+The repository has already been audited at a high level. Read the existing README, `Docs/design.md`, `Docs/implementation-plan.md`, `workers/mailbox/README.md`, the mailbox credential migration and all relevant source files before implementation.
+
+## What already exists
+
+The repository contains:
+
+- React + TypeScript + Vite frontend.
+- Supabase Auth and PostgreSQL database foundation.
+- CRM contacts, companies, deals, tasks and activity records.
+- Sequence and campaign database foundations.
+- Mailbox account metadata and encrypted credential storage.
+- A Cloudflare mailbox Worker that verifies IMAP and SMTP authentication.
+- A durable job dispatcher.
+- A read-only MCP server skeleton.
+- A detailed application design system.
+
+Do not replace these systems without demonstrating why the existing implementation is unsuitable.
+
+## What is incomplete
+
+The repository documentation identifies the following missing functionality:
+
+- Incremental mailbox synchronization.
+- Folder and message synchronization.
+- MIME parsing and safe email rendering.
+- Email threading.
+- Email composition and sending.
+- Reply processing.
+- Sequence execution.
+- Concrete background email job handlers.
+- Campaign sending and delivery event processing.
+- Functional prospecting and enrichment.
+- Production deployment.
+
+Your task is to complete the email system using the existing architecture.
+
+## Phase 1 — Verify the actual code
+
+Read the complete relevant implementation, including:
+
+- All Supabase migrations.
+- All mailbox and dispatcher Worker files.
+- Sequence and campaign frontend components.
+- Sequence and campaign database functions.
+- Existing email provider logic.
+- Authentication and workspace permissions.
+- Existing MCP tools.
+- Tests and validation utilities.
+
+Create an evidence-based implementation report at:
+
+`Docs/email-system-audit.md`
+
+Include actual file paths, database entities, functions, existing behavior, missing behavior and security risks.
+
+Do not assume the implementation plan is completely current. Verify each claim against the source code.
+
+## Phase 2 — Finish the custom mailbox
+
+Complete the existing mailbox Worker and Inbox module.
+
+The application must provide:
+
+- Mailbox connection management.
+- Connection health.
+- Incremental IMAP synchronization.
+- Folder discovery.
+- Message storage.
+- Safe MIME parsing.
+- Conversation threading.
+- Inbox and Sent views.
+- Email composition.
+- Draft saving.
+- Reply and reply-all.
+- Attachment support.
+- Search.
+- Read/unread and flag state.
+- SMTP sending.
+- Sent-folder reconciliation.
+- Provider error reporting.
+
+Use the existing encrypted credential model.
+
+Never expose mailbox passwords, encryption keys or service-role credentials to the frontend.
+
+Before sending, test the actual IMAP/SMTP implementation against a controlled mailbox.
+
+## Phase 3 — Complete the sequence system
+
+Build a complete sequence execution engine using the existing database and dispatcher infrastructure.
+
+The sequence builder must support:
+
+1. Send email.
+2. Wait or delay.
+3. Wait for reply.
+4. Conditional branch.
+5. Create CRM task.
+6. Update CRM record.
+7. End sequence.
+
+Each enrollment must independently track its current step, execution state, scheduled time, retries and completion reason.
+
+Build a visual sequence editor that supports editing, saving, duplicating, testing, pausing, resuming and activating sequences.
+
+Before activation, show:
+
+- Selected contacts.
+- Eligible recipients.
+- Excluded recipients and reasons.
+- Selected mailbox.
+- Sequence steps.
+- Schedule and time zone.
+- Sending limits.
+- Missing personalization variables.
+- Approval requirements.
+
+Do not activate sequences using mock data or frontend-only timers.
+
+## Phase 4 — Reliable execution
+
+Use durable database jobs as the source of truth.
+
+Implement:
+
+- Persistent scheduling.
+- Atomic job claiming.
+- Idempotency.
+- Concurrency protection.
+- Bounded retries.
+- Dead-letter handling.
+- Job recovery.
+- Stuck-job reconciliation.
+- Sequence versioning.
+- Sender rate limits.
+- Final suppression checks before every send.
+
+Do not assume Cloudflare Queues are permanent storage.
+
+Do not retry SMTP sends blindly when the provider may have accepted the email before a connection timeout.
+
+## Phase 5 — Reply detection and automation
+
+When an incoming email is synchronized:
+
+- Match it to the correct conversation.
+- Match the sender to a CRM contact when reliable.
+- Record the email in the CRM activity timeline.
+- Detect relevant active sequence enrollments.
+- Stop future automated steps according to the configured policy.
+- Notify the salesperson.
+- Create follow-up tasks.
+- Update sequence analytics.
+
+Support reply classifications such as interested, not interested, meeting request, objection, out of office, unsubscribe and unknown.
+
+Treat a human reply as a factual event. AI classification is a separate interpretation.
+
+## Phase 6 — Deliverability and safety
+
+Implement:
+
+- Hard and soft bounce processing.
+- Suppression.
+- Unsubscribe.
+- Sending limits.
+- Sender health.
+- Provider error handling.
+- Campaign pause rules.
+- Domain authentication guidance.
+- Accurate delivery statuses.
+
+Do not claim SMTP acceptance guarantees inbox delivery.
+
+Do not claim to remove messages from recipients' spam folders.
+
+Do not fabricate open, click, delivery or reply events.
+
+## Phase 7 — Provider and deployment validation
+
+The current intended stack is:
+
+- Supabase for Auth and PostgreSQL.
+- Vercel for the frontend.
+- Cloudflare Workers for mailbox and background processing.
+- Hostinger or another compatible provider for custom-domain mailboxes.
+
+However, validate the runtime and provider compatibility.
+
+The repository documents that Cloudflare Workers Free has a 10 ms CPU budget, which may be insufficient for the current mailbox TLS connection workflow.
+
+Measure the actual connection behavior.
+
+Do not enable production sending until the selected email provider's policies and limits have been reviewed.
+
+Hostinger's published policy prohibits unsolicited email. Do not implement cold outreach sending through Hostinger SMTP.
+
+Do not silently move the application to a paid provider or change the deployment architecture. Present alternatives and their costs before making such a change.
+
+## Phase 8 — MCP
+
+Extend the existing `mcp/` server.
+
+Provide secure tools for:
+
+- Listing and reading sequences.
+- Creating sequence drafts.
+- Updating drafts.
+- Viewing enrollments.
+- Reading email threads.
+- Searching CRM activity.
+- Viewing sequence analytics.
+- Creating follow-up tasks.
+- Pausing and resuming sequences.
+- Stopping enrollments.
+
+High-impact operations must use approval workflows.
+
+The MCP server must use the same permission checks as the application.
+
+Never expose raw database access, mailbox credentials or unrestricted sending operations.
+
+## Phase 9 — Tests
+
+Create automated tests for:
+
+- Duplicate enrollment.
+- Sequence scheduling.
+- Delays and branches.
+- Reply-based stopping.
+- Suppression.
+- Hard and soft bounces.
+- Retry behavior.
+- SMTP ambiguity.
+- Worker restarts.
+- Queue recovery.
+- Concurrent job execution.
+- Time zones and daylight-saving changes.
+- Mailbox disconnection.
+- Permission checks.
+- MCP approval requirements.
+
+Use mock providers for automated tests and a dedicated test mailbox for controlled integration testing.
+
+Never use the actual prospect database for test sending.
+
+## Phase 10 — Completion report
+
+After implementation, provide:
+
+- Audit findings.
+- Existing components reused.
+- Files changed.
+- Database migrations added.
+- Mailbox integration results.
+- Sequence functionality completed.
+- Background execution results.
+- MCP tools completed.
+- Tests run and results.
+- Build and type-check results.
+- Remaining limitations.
+- Deployment instructions.
+- Required environment variables.
+- Actual production readiness assessment.
+
+Do not claim the system is production-ready unless its core workflows have been tested against the actual deployed infrastructure.
+
+Begin by completing the repository audit, then implement the highest-priority missing components in controlled phases.
+
+The objective is a complete, reliable, secure custom email and sequence system integrated into EIDEN Reach—not another mockup or isolated module.

@@ -1,0 +1,21 @@
+Create a distinctive, premium brand identity for **EIDEN Reach**, a B2B sales workspace combining CRM, contact management, custom-domain email, automated sequences, sales pipelines, analytics and AI sales assistants.
+
+The audience is business teams and sales professionals. The identity should feel trustworthy, intelligent, confident, precise and enterprise-ready.
+
+**Logo concept:** Develop a distinctive geometric symbol representing purposeful connection, reaching the right people and moving business forward. Explore an abstract connection path, two points joined by a precise arc, a subtle signal motif, or a custom monogram that hints at the letter R. The mark must be simple, recognizable and legible at favicon size.
+
+Avoid literal envelopes, paper planes, generic chain links, robot heads, generic AI sparkles, overused infinity symbols and stock CRM iconography.
+
+**Brand palette:**
+- Deep evergreen: `#123E39`
+- Teal: `#0C5752`
+- Warm off-white: `#F4F6F2`
+- Muted gold: `#CFC292`
+
+Use a refined contemporary sans-serif wordmark with carefully balanced kerning. The exact brand name must read **EIDEN Reach**. Make the symbol work independently and create versions for light backgrounds, dark evergreen backgrounds and monochrome use.
+
+The logo should be minimal, ownable, scalable and timeless. It must work in the application sidebar, browser favicon, website, email interface, presentations and mobile app icon.
+
+**Generate four genuinely distinct logo directions**, each with its own design concept rather than minor variations of the same mark. Present clean logo artwork on neutral backgrounds, with a horizontal symbol-and-wordmark lockup and a symbol-only version for each direction. Briefly explain the idea behind each concept and recommend the strongest long-term direction.
+
+Avoid mockup-only presentations, excessive gradients, neon colors, complex tiny details, extra words, misspellings and marks that imitate Apollo, HubSpot, Salesforce, Mailchimp or other existing products. Prioritize the actual logo design over decorative presentation.

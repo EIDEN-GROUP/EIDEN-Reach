@@ -1,0 +1,1214 @@
+# EIDEN REACH — COMPLETE EMAIL SYSTEM & SEQUENCE ENGINE
+## Repository Audit, Architecture Review, Implementation and Production Readiness
+
+You are the lead software architect, senior email infrastructure engineer, backend engineer, database architect, security engineer and QA engineer responsible for completing the email system in **EIDEN Reach**.
+
+Your task is to deeply inspect the existing codebase, understand everything that has already been implemented, identify incomplete or incorrectly implemented functionality, and turn the existing email system into a reliable, fully functional production-grade platform.
+
+This is not a request to create another isolated email module or redesign the application from scratch.
+
+**Your primary responsibility is to understand the current application and complete its existing email architecture correctly. Preserve working functionality and extend it without introducing unnecessary rewrites.**
+
+---
+
+# PART 1 — REPOSITORY AUDIT: UNDERSTAND EVERYTHING FIRST
+
+Before modifying the code, perform a comprehensive audit.
+
+Do not assume that a feature works because a UI element exists. Trace the actual implementation from frontend interactions through APIs, business logic, database operations, provider connections and background processing.
+
+### 1. Inspect the entire repository
+
+Read and investigate:
+
+- `AGENTS.md`, `CLAUDE.md`, `README.md` and all project instructions.
+- `design.md` and existing UI/UX references.
+- All `package.json` files and dependency lockfiles.
+- Application routes, layouts and components.
+- API endpoints and server actions.
+- Database schemas, migrations, policies and indexes.
+- Email services and provider adapters.
+- SMTP and IMAP implementations.
+- Mailbox synchronization and message processing.
+- Email composition, sending and reply handling.
+- Sequence builder and campaign functionality.
+- Background workers, queues, scheduled jobs and retries.
+- Webhooks and event processors.
+- Authentication, authorization and permissions.
+- Cloudflare Worker configuration and Vercel configuration.
+- Existing MCP implementations and integration tools.
+- Tests, fixtures, mocks and development scripts.
+- Environment-variable definitions and provider configuration.
+
+Search the repository for all references to:
+
+`sequence`, `email`, `smtp`, `imap`, `mailbox`, `message`, `thread`, `campaign`, `sender`, `send`, `inbox`, `reply`, `bounce`, `unsubscribe`, `tracking`, `queue`, `worker`, `cron`, `webhook`, `mcp`, `contact` and `automation`.
+
+Follow each important code path rather than relying exclusively on search results.
+
+### 2. Map the existing implementation
+
+Create `docs/email-system-audit.md`.
+
+For every important feature, classify its actual state:
+
+- **Implemented and verified**
+- **Implemented but incomplete**
+- **UI only / mock data**
+- **Backend implemented but not connected**
+- **Incorrect or unreliable**
+- **Missing**
+- **Security or production risk**
+
+Include the relevant file paths, functions, components, database tables and API routes as evidence.
+
+Specifically answer:
+
+1. How does the current email system work?
+2. How are mailboxes connected?
+3. How are emails sent?
+4. How are incoming messages retrieved?
+5. Where are emails stored?
+6. How are conversations grouped into threads?
+7. How are replies detected?
+8. Does the sequence system actually execute scheduled steps?
+9. What currently schedules background work?
+10. How are failed jobs handled?
+11. What happens when a worker restarts?
+12. How are duplicate sends prevented?
+13. What data is available for email analytics?
+14. What is missing for reliable production operation?
+
+Identify duplicated logic, architectural inconsistencies, dead code, incorrect assumptions and dependencies that are unsuitable for the deployment environment.
+
+### 3. Establish a baseline
+
+Before changing anything:
+
+- Inspect the current Git status and preserve existing uncommitted changes.
+- Identify the current branch and commit.
+- Run the existing build, lint, type checks and tests where available.
+- Record existing failures separately from issues introduced by your work.
+- Never overwrite unrelated user changes.
+- Never commit, push, deploy or modify production data without explicit authorization.
+
+After the audit, create `docs/email-system-architecture.md` and `docs/email-sequences-spec.md`.
+
+Then proceed with implementation in controlled phases. Do not stop after producing documentation.
+
+---
+
+# PART 2 — WHAT THE EMAIL SEQUENCE SYSTEM MUST BE
+
+The sequence system should be a complete email automation engine, not simply a bulk email sender.
+
+It must allow users to construct multi-step workflows, enroll selected contacts, send personalized emails, wait for specific periods or events, detect replies, branch workflows and automatically stop or continue based on defined conditions.
+
+Think of it as an automation engine for each individual contact.
+
+Every enrolled contact must have its own independently tracked execution state.
+
+## 1. Main sequence interface
+
+Create or complete the Sequences module with these sections:
+
+**Sequences overview**
+
+Display:
+
+- Total sequences.
+- Active sequences.
+- Draft sequences.
+- Paused sequences.
+- Completed sequences.
+- Total active enrollments.
+- Emails scheduled.
+- Emails accepted by the provider.
+- Replies received.
+- Positive replies.
+- Bounces and unsubscribes.
+- Meetings generated where actual booking data exists.
+
+Include search, status filters, owner filters, sorting and pagination.
+
+Each sequence should have:
+
+- Name and description.
+- Created by and owner.
+- Created and updated dates.
+- Current status.
+- Number of enrolled contacts.
+- Number of completed enrollments.
+- Email sending activity.
+- Reply and conversion statistics.
+
+Do not display invented statistics.
+
+## 2. Sequence creation workflow
+
+Build a structured sequence creation flow.
+
+### Step 1 — Basic information
+
+User enters:
+
+- Sequence name.
+- Description.
+- Internal owner.
+- Campaign category.
+- Optional associated pipeline or sales objective.
+
+### Step 2 — Select audience
+
+Allow users to select contacts from:
+
+- CRM contact lists.
+- Saved filters.
+- Manually selected contacts.
+- Imported prospect lists.
+- Qualified leads.
+- Custom CRM segments.
+
+Support exclusions:
+
+- Previously enrolled contacts.
+- Contacts already in conflicting sequences.
+- Invalid addresses.
+- Unsubscribed contacts.
+- Suppressed contacts.
+- Known hard bounces.
+- Contacts without required permission or eligibility.
+- Contacts excluded by frequency limits.
+
+Before enrollment, show the exact eligible and excluded contact counts, including exclusion reasons.
+
+Never enroll a contact simply because an email address exists.
+
+### Step 3 — Select sender
+
+Allow users to select an authorized connected mailbox.
+
+Display:
+
+- Sender name.
+- Sender email.
+- Provider.
+- Connection status.
+- Verification status.
+- Current usage and applicable sending limits.
+- Health warnings.
+
+Do not let a user select disconnected or unhealthy mailboxes.
+
+Support future sender-pool capabilities only where they respect provider rules, ownership and reputation. Never rotate accounts to bypass sending limits or provider enforcement.
+
+### Step 4 — Configure sending schedule
+
+Allow configuration of:
+
+- Sending days.
+- Sending hours.
+- Time zone.
+- Daily and hourly limits.
+- Delay between messages.
+- Business-day scheduling.
+- Optional holiday exclusions.
+- Global contact frequency limits.
+
+Prefer the contact's IANA time zone when known. Otherwise use a clearly configured fallback time zone.
+
+Handle daylight-saving transitions correctly.
+
+### Step 5 — Build the sequence
+
+Use a visual, editable step builder.
+
+### Step 6 — Review and test
+
+Display:
+
+- Selected audience.
+- Sender mailbox.
+- Sequence steps.
+- Expected scheduling.
+- Personalization-variable validation.
+- Exclusions and suppression.
+- Sending limits.
+- Test email controls.
+
+Allow test sending to explicitly selected internal addresses.
+
+### Step 7 — Activate
+
+Provide a final launch confirmation.
+
+Launching must create valid enrollments and durable scheduled execution records. It must not simply set a database status to `active` without an operational scheduler.
+
+---
+
+# PART 3 — VISUAL SEQUENCE BUILDER
+
+The sequence builder is one of the most important parts of this application.
+
+It must be intuitive for nontechnical salespeople.
+
+Build a visual timeline with connected steps, editable configuration panels and clear branching.
+
+## 1. Supported step types
+
+Implement the following step types:
+
+### A. Send Email
+
+Configuration:
+
+- Email template.
+- Subject line.
+- HTML content.
+- Plain-text content.
+- Sender mailbox.
+- Personalization variables.
+- Signature.
+- Attachments, where permitted.
+- Tracking preferences.
+- Reply-threading configuration.
+
+### B. Wait / Delay
+
+Support:
+
+- Minutes.
+- Hours.
+- Days.
+- Business days.
+- Specific date and time.
+- Until a specified event.
+- Sending-window-aware scheduling.
+
+### C. Wait for Reply
+
+Wait for a matching human reply.
+
+Configuration:
+
+- Maximum waiting duration.
+- What happens when a reply arrives.
+- What happens when the timeout expires.
+- Whether the enrollment pauses for manual review.
+- Whether an automatic reply should be treated separately.
+
+### D. Conditional Branch
+
+Support conditions such as:
+
+- Contact replied.
+- Contact clicked a tracked link, when tracking is available and meaningful.
+- Meeting booked, when a supported booking integration exists.
+- Contact field matches a condition.
+- Deal stage changed.
+- Contact assigned or reassigned.
+- Custom CRM condition.
+- Previous step succeeded or failed.
+
+Branch into clearly defined paths such as YES / NO or TRUE / FALSE.
+
+### E. Create Task
+
+Create a CRM task with:
+
+- Title.
+- Description.
+- Owner.
+- Due date.
+- Priority.
+- Related contact and company.
+- Related sequence.
+
+Examples: Call prospect, review reply, prepare proposal.
+
+### F. Update CRM
+
+Allow safe and permission-checked updates to configured contact or deal fields.
+
+### G. End Sequence
+
+Stop the current enrollment with a recorded reason.
+
+All step types must have a clear configuration panel, validation rules and an understandable execution status.
+
+Do not implement visual step types that have no corresponding backend execution logic.
+
+## 2. Example sequence
+
+Create the following as a demonstration of expected sequence behavior.
+
+**B2B prospect outreach**
+
+<step>Initial email</step>
+
+Day 0: Send a personalized introduction.
+
+Wait three business days.
+
+<step>Check for reply</step>
+
+If a human reply is received:
+
+- Stop future automated emails.
+- Mark enrollment as Replied.
+- Update the CRM activity timeline.
+- Notify the assigned salesperson.
+- Create a follow-up task.
+
+If no reply arrives:
+
+Continue to follow-up email.
+
+Day 3: Send a short follow-up in the existing conversation thread.
+
+Wait three business days.
+
+Check for reply again.
+
+If no reply:
+
+Day 6: Send a value-focused email with a relevant resource or proposition.
+
+Wait four business days.
+
+If still unanswered:
+
+Day 10: Send a final polite follow-up.
+
+Then mark the enrollment Completed.
+
+This is an example sequence, not a fixed workflow. Every delay, branch and email must be editable.
+
+---
+
+# PART 4 — THE EXECUTION ENGINE
+
+This is the backend foundation that makes sequences actually work.
+
+Do not implement the sequence engine as frontend timers or browser-side JavaScript.
+
+## 1. Individual contact execution
+
+Every enrollment must maintain an independent state machine.
+
+Implement meaningful states such as:
+
+- Pending.
+- Active.
+- Waiting.
+- Scheduled.
+- Sending.
+- Paused.
+- Replied.
+- Completed.
+- Bounced.
+- Unsubscribed.
+- Suppressed.
+- Cancelled.
+- Failed.
+- Needs Review.
+
+Store the current step, enrollment status, next scheduled execution, sequence version, contact, mailbox and execution history.
+
+Maintain separate execution states for individual steps.
+
+Never infer the state of all enrollments only from the parent sequence status.
+
+## 2. Persistent scheduling
+
+Every scheduled step must have a durable database record.
+
+At minimum, store:
+
+- Enrollment ID.
+- Sequence version.
+- Step ID.
+- Scheduled execution time in UTC.
+- Recipient time zone.
+- Current status.
+- Attempt count.
+- Last attempt.
+- Next retry.
+- Idempotency key.
+- Last error code and safe error details.
+- Completion timestamp.
+
+The database is the source of truth.
+
+Cloudflare Queues are execution triggers, not the sole storage for pending jobs.
+
+If the queue loses or expires a message, the system must be able to identify and recover the due job from the database.
+
+Implement periodic reconciliation to find:
+
+- Overdue scheduled jobs.
+- Stuck processing jobs.
+- Expired locks.
+- Failed jobs requiring review.
+- Jobs missing their expected queue message.
+- Incomplete sends requiring reconciliation.
+
+## 3. Concurrency and idempotency
+
+This is mandatory.
+
+The system must prevent:
+
+- Two workers sending the same step simultaneously.
+- Duplicate enrollment.
+- A sequence executing a completed step again.
+- A message being resent after an uncertain provider response without reconciliation.
+- Two CRM events being created for one inbound message.
+
+Use database transactions, conditional updates, leases or locking mechanisms and unique constraints.
+
+Do not promise true exactly-once SMTP delivery. SMTP does not offer a universal idempotency guarantee.
+
+Instead, design reliable duplicate prevention, message reconciliation and explicit states for ambiguous delivery outcomes.
+
+An SMTP timeout after the server has accepted a message must not cause blind retries.
+
+## 4. Sequence versioning
+
+When a sequence is edited:
+
+- Preserve the original version for existing enrollments where necessary.
+- Make changes to future enrollments explicit.
+- Allow administrators to create a new version.
+- Define whether active enrollments migrate to a new version.
+- Never silently change a contact's scheduled steps.
+
+Record who changed the sequence and when.
+
+---
+
+# PART 5 — CUSTOM MAILBOX AND EMAIL INTEGRATION
+
+The platform uses custom-domain mailboxes provided by Hostinger or compatible email providers.
+
+There is no Google Workspace dependency.
+
+The application must provide its own mailbox interface.
+
+## 1. Provider-independent adapter
+
+Inspect the current provider architecture and reuse it.
+
+The provider integration layer should support, where available:
+
+- Connection verification.
+- IMAP authentication.
+- SMTP authentication.
+- Folder discovery.
+- Message synchronization.
+- Message sending.
+- Draft handling.
+- Flag updates.
+- Folder operations.
+- Attachment retrieval.
+- Sending limits.
+- Provider error normalization.
+- Disconnection and reconnection.
+
+For Hostinger Email, the documented configuration currently includes:
+
+- IMAP: `imap.hostinger.com`, port `993`, SSL.
+- SMTP: `smtp.hostinger.com`, port `465`, SSL.
+- Alternative SMTP: port `587`, STARTTLS.
+
+These values must be configurable rather than hardcoded.
+
+Check the actual provider plan's sending, mailbox, connection and rate limits.
+
+Do not assume Hostinger supports every delivery webhook or advanced email-tracking event.
+
+## 2. Cloudflare Worker feasibility
+
+The intended background execution environment is Cloudflare Workers Free.
+
+Inspect the existing Wrangler configuration and runtime compatibility date.
+
+Cloudflare Workers supports outbound TCP connections, as well as Node-compatible `net` and `tls` APIs with the appropriate compatibility configuration.
+
+However, compatibility must be proven using the actual IMAP and SMTP libraries chosen for EIDEN Reach.
+
+Implement a small integration proof of concept:
+
+1. Resolve the configured server.
+2. Establish the TLS connection.
+3. Authenticate to a dedicated test mailbox.
+4. Read a controlled test message.
+5. Send a controlled test message.
+6. Disconnect safely.
+7. Record sanitized timing and failure information.
+
+Never log credentials or email body content.
+
+Cloudflare Free currently has a 10 ms CPU budget per invocation, 100,000 daily requests, 128 MB memory, five Cron Triggers per account and a maximum of six simultaneous outgoing connections per request.
+
+Cloudflare Queues Free currently includes 10,000 operations per day and 24-hour message retention.
+
+Design around those limits and verify them against current official documentation at implementation time.
+
+Relevant references:
+
+- https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/
+- https://developers.cloudflare.com/workers/runtime-apis/nodejs/net/
+- https://developers.cloudflare.com/workers/runtime-apis/nodejs/tls/
+- https://developers.cloudflare.com/workers/platform/limits/
+- https://developers.cloudflare.com/queues/platform/pricing/
+- https://developers.cloudflare.com/queues/platform/limits/
+
+Port 25 is prohibited for outbound TCP connections from Workers. Do not use it for SMTP.
+
+If a chosen email library cannot run reliably in the Worker runtime, find a compatible implementation or document the smallest practical alternative. Do not silently move the email system to an unrelated paid provider.
+
+## 3. Mailbox synchronization
+
+Implement incremental IMAP synchronization.
+
+Use mailbox folder names, UIDs and `UIDVALIDITY`, plus `MODSEQ` when supported.
+
+Do not rely exclusively on message dates as the synchronization cursor.
+
+Support:
+
+- Initial folder synchronization.
+- Incremental synchronization.
+- New messages.
+- Read/unread changes.
+- Flag changes.
+- Deleted or moved messages.
+- Folder changes.
+- Connection interruption.
+- Reconnection.
+- Authentication expiry.
+- Duplicate prevention.
+- Synchronization recovery.
+
+Use bounded polling with short-lived connections rather than depending on a permanently connected IMAP IDLE session inside ephemeral Workers.
+
+Define a configurable polling frequency within the actual runtime and provider limits.
+
+Make sure folders such as Sent, Drafts, Trash and Spam are discovered from the mailbox where possible rather than assuming identical folder names across providers.
+
+## 4. Sending and Sent-folder reconciliation
+
+When sending via SMTP:
+
+- Generate and preserve message identifiers where appropriate.
+- Maintain the relationship between the application send record and the SMTP submission.
+- Save or synchronize the sent message in the correct provider folder.
+- Avoid creating duplicates when the provider automatically saves sent messages.
+- Reconcile an uncertain SMTP send by checking available identifiers and sent-folder evidence.
+
+Use correct MIME formatting and support HTML and plain-text alternatives.
+
+Validate recipients, sender authorization, reply-to addresses, CC and BCC.
+
+Never allow users to send from a mailbox they do not control or have permission to use.
+
+---
+
+# PART 6 — EMAIL THREADS AND REPLY DETECTION
+
+Replies must be detected and linked to the correct CRM contacts and sequence enrollments.
+
+## 1. Threading
+
+Use:
+
+- `Message-ID`
+- `In-Reply-To`
+- `References`
+- Provider identifiers.
+- Mailbox folder identifiers.
+- Sender and recipient matching.
+
+Do not group all emails with the same subject into a conversation.
+
+Follow-up steps should preserve conversation threading where the provider supports it.
+
+## 2. Reply processing workflow
+
+When a new incoming message is synchronized:
+
+1. Identify the message and mailbox.
+2. Prevent duplicate ingestion.
+3. Parse message headers and participants.
+4. Find the matching conversation.
+5. Match the sender to an existing CRM contact when reliable.
+6. Save the message.
+7. Add the event to the CRM activity timeline.
+8. Identify relevant active sequence enrollments.
+9. Pause or stop the relevant sequence enrollments.
+10. Notify the assigned salesperson.
+11. Create any configured CRM task.
+12. Update sequence analytics.
+
+Handle alias addresses and multiple associated mailboxes carefully.
+
+If a message cannot be confidently matched, place it in an unmatched or needs-review state.
+
+## 3. Reply classification
+
+Build optional AI-assisted reply classification.
+
+Possible categories:
+
+- Interested.
+- Wants more information.
+- Meeting request.
+- Pricing question.
+- Objection.
+- Not interested.
+- Referral.
+- Out of office.
+- Unsubscribe.
+- Automated response.
+- Unknown.
+
+Separate classification from factual message detection.
+
+A reply from the actual prospect is a reply event. Whether it is positive or negative is an additional classification.
+
+Do not use AI classification to override a clear unsubscribe request.
+
+An out-of-office response should not be treated as a normal positive reply or automatically cause the system to send an immediate follow-up. It can be handled through a separate configurable pause rule.
+
+For uncertain classification, create a review task.
+
+## 4. Reply-based sequence stopping
+
+By default, a human reply should stop the current outbound sequence for that contact.
+
+Provide a carefully configured global stop option for other active sales sequences if appropriate.
+
+Do not automatically stop unrelated transactional emails or legitimate newsletters without an explicit policy.
+
+Make the stopping action atomic with the decision to schedule or send the next email wherever possible.
+
+The final worker must re-check the contact and enrollment's eligibility immediately before sending.
+
+---
+
+# PART 7 — EMAIL DELIVERABILITY, BOUNCES AND UNSUBSCRIBE
+
+Build these features from actual available provider signals.
+
+## 1. Delivery states
+
+Use precise statuses:
+
+- Created.
+- Queued.
+- Processing.
+- SMTP accepted.
+- Delivery confirmed, only where actual confirmation exists.
+- Temporarily bounced.
+- Permanently bounced.
+- Failed.
+- Unknown / requires reconciliation.
+
+Do not classify SMTP acceptance as guaranteed inbox delivery.
+
+## 2. Bounce handling
+
+Where available, receive and parse delivery-status notifications.
+
+Support:
+
+- Hard bounce.
+- Soft bounce.
+- Invalid recipient.
+- Mailbox unavailable.
+- Domain not found.
+- Policy rejection.
+- Sending restriction.
+- Authentication failure.
+- Provider error.
+
+Classify errors conservatively.
+
+Hard bounces should suppress the recipient from future sends as appropriate.
+
+Soft bounces may be retried according to a configurable, bounded policy. Do not retry permanent failures.
+
+Do not fabricate bounce events when the provider supplies no reliable event.
+
+## 3. Spam complaints and inbox placement
+
+The application cannot generally inspect or delete emails in an arbitrary recipient's Spam folder.
+
+Do not build a fake feature that claims to remove messages from recipients' Spam folders.
+
+Instead implement:
+
+- Complaint-event ingestion when a provider supports it.
+- Bounce monitoring.
+- Sender health checks.
+- Domain authentication checks.
+- Campaign pause rules.
+- Recipient suppression.
+- Optional inbox-placement testing.
+- Sender reputation warnings.
+
+Keep the distinction between an actual complaint, a suspected spam placement and an ordinary sending failure.
+
+## 4. Unsubscribe and suppression
+
+Build a global suppression system with:
+
+- Email address.
+- Organization scope where relevant.
+- Reason.
+- Source.
+- Event date.
+- Related campaign.
+- Related provider event.
+- Who performed the action.
+
+Before every send, verify suppression status.
+
+For opt-in marketing campaigns, implement appropriate unsubscribe headers and accessible unsubscribe handling, including one-click unsubscribe where required.
+
+Treat unsubscribes and spam complaints as high-priority events.
+
+Do not allow a salesperson to override a global suppression record without an explicitly authorized administrative process and an appropriately lawful reason.
+
+---
+
+# PART 8 — PERSONALIZATION AND EMAIL TEMPLATES
+
+The system should have a reusable template engine.
+
+Support variables such as:
+
+- `first_name`
+- `last_name`
+- `full_name`
+- `company_name`
+- `job_title`
+- `industry`
+- `website`
+- `owner_name`
+- `sender_name`
+- `sender_email`
+- `custom_fields`
+
+Implement:
+
+- Variable picker.
+- Live preview.
+- HTML and plain-text content.
+- Subject-line editor.
+- Signature support.
+- Test sending.
+- Missing-variable validation.
+- Default values only where explicitly configured.
+- Template categories.
+- Template ownership.
+- Template versioning.
+
+Do not send messages containing unresolved variables such as `{{first_name}}`.
+
+Support safe HTML rendering and sanitize untrusted content.
+
+AI may suggest personalized copy, but all generated content must be previewable before being included in a live sequence.
+
+---
+
+# PART 9 — ANALYTICS AND PERFORMANCE
+
+Create a sequence performance dashboard.
+
+Metrics should include:
+
+- Contacts enrolled.
+- Eligible recipients.
+- Emails queued.
+- Messages submitted.
+- Provider-confirmed deliveries, where available.
+- Unique human replies.
+- Positive replies.
+- Meetings booked when supported.
+- Hard bounces.
+- Soft bounces.
+- Unsubscribes.
+- Complaints when available.
+- Completion rate.
+- Conversion by step.
+
+Report clear denominators and exclude test messages.
+
+Do not treat opens as guaranteed human actions.
+
+Open tracking should be optional and clearly described as unreliable due to privacy protections and image proxies.
+
+Link tracking should be implemented through safe redirect infrastructure only where permitted. Account for automated link scanners and security products that may visit URLs without genuine user interaction.
+
+Do not count these automated visits as human engagement.
+
+Provide filters by sequence, sender, owner, date and campaign.
+
+Include a step-level breakdown to identify the steps where recipients stop replying or where sending failures occur.
+
+---
+
+# PART 10 — DATABASE AND EVENT MODEL
+
+Audit the current database before adding tables.
+
+Reuse existing entities whenever possible.
+
+The design should support the following logical records:
+
+**Mailbox infrastructure**
+- Mailbox accounts.
+- Provider configurations.
+- Folder metadata.
+- Synchronization cursors.
+- Synchronization runs.
+- Messages.
+- Threads.
+- Message participants.
+- Attachment metadata.
+
+**Sending infrastructure**
+- Outbound messages.
+- Send attempts.
+- SMTP/provider responses.
+- Delivery events.
+- Bounce records.
+- Suppression records.
+- Unsubscribe records.
+- Provider capabilities.
+
+**Sequence infrastructure**
+- Sequence definitions.
+- Sequence versions.
+- Sequence steps.
+- Step conditions.
+- Audience rules.
+- Enrollments.
+- Enrollment execution state.
+- Step execution history.
+- Scheduled jobs.
+- Retry state.
+- Automation events.
+
+**Operational infrastructure**
+- Idempotency records.
+- Worker execution records.
+- Queue references.
+- Dead-letter records.
+- Mailbox health.
+- Provider errors.
+- Audit events.
+
+Add appropriate:
+
+- Primary keys.
+- Foreign keys.
+- Unique constraints.
+- Query indexes.
+- Timestamps.
+- Ownership relationships.
+- Data retention policies.
+- Row-level security where appropriate.
+
+Store timestamps in UTC and retain IANA time-zone information for scheduling.
+
+Use transactions for state transitions requiring multiple related writes.
+
+Never store SMTP passwords in plaintext. Use secure encryption and key management appropriate for the deployment environment.
+
+Do not store entire email messages inside Cloudflare Queue payloads. Send small references to durable database records.
+
+---
+
+# PART 11 — SECURITY
+
+The email system handles sensitive business conversations and mailbox credentials. Security is a production requirement.
+
+Implement:
+
+- Server-side authorization.
+- Mailbox-level ownership checks.
+- Encrypted mailbox credentials.
+- Protected environment secrets.
+- Secure session handling.
+- Input validation.
+- Rate limits.
+- XSS prevention.
+- CSRF protection where relevant.
+- SQL injection prevention.
+- SSRF protections on configurable provider hosts.
+- Safe MIME parsing.
+- HTML email sanitization.
+- Attachment validation and size limits.
+- Private attachment storage.
+- Signed webhook validation.
+- Replay protection.
+- Idempotency.
+- Audit logging.
+- Authentication failure alerts.
+- Credential revocation and rotation.
+- Secure error handling without exposing passwords or message contents.
+
+Untrusted incoming email is external user content. Never execute HTML scripts or automatically load remote resources.
+
+Do not allow arbitrary SMTP hostnames to become an SSRF vector. Validate provider configurations, resolve addresses safely and block private, loopback and internal infrastructure targets.
+
+Do not expose arbitrary SQL, credentials or privileged database access through the frontend or MCP.
+
+---
+
+# PART 12 — AI AND MCP INTEGRATION
+
+The existing EIDEN Reach MCP server must be reviewed and extended rather than recreated unnecessarily.
+
+The AI should be able to work with the sequence system through authorized tools.
+
+Examples:
+
+**Read operations**
+- `list_sequences`
+- `get_sequence`
+- `get_sequence_enrollments`
+- `get_sequence_analytics`
+- `get_email_thread`
+- `search_email_activity`
+- `get_mailbox_health`
+
+**Write operations**
+- `create_sequence_draft`
+- `update_sequence_draft`
+- `create_email_draft`
+- `create_follow_up_task`
+- `pause_sequence`
+- `resume_sequence`
+- `stop_enrollment`
+- `update_enrollment_status` where permitted.
+
+**Approval-gated operations**
+- Activate a sequence.
+- Enroll a large audience.
+- Send an email campaign.
+- Modify a connected mailbox.
+- Export large recipient lists.
+- Modify global sending and suppression policies.
+
+Claude and ChatGPT must see the same permitted data as the user accessing the application.
+
+All MCP tools must use the same authentication, permission checks and business services as the regular application.
+
+No raw SQL execution or bypass of approval rules.
+
+Before a bulk action, provide a preview including the number of recipients, exclusions, selected sender and estimated schedule.
+
+---
+
+# PART 13 — IMPLEMENTATION AND TESTING
+
+Do not attempt to implement every part simultaneously.
+
+Follow this order, adapting to the architecture you discover.
+
+### Phase 0 — Audit
+
+Complete the repository audit and baseline tests.
+
+Produce:
+- `docs/email-system-audit.md`
+- `docs/email-system-architecture.md`
+- `docs/email-sequences-spec.md`
+- A prioritized implementation checklist.
+
+### Phase 1 — Provider integration proof
+
+Verify real IMAP and SMTP compatibility in the selected Cloudflare Worker runtime using a dedicated test mailbox.
+
+Confirm TLS, authentication, folder discovery, reading messages, sending messages and clean disconnection.
+
+Test real deployed connectivity only with explicit authorization and controlled email accounts.
+
+### Phase 2 — Mailbox foundation
+
+Complete mailbox connection management, incremental synchronization, folder discovery, conversation storage, thread matching and custom inbox functionality.
+
+### Phase 3 — Sending engine
+
+Complete templates, composition, SMTP submission, Sent-folder reconciliation, retry handling, message identifiers and sending status.
+
+### Phase 4 — Sequence builder
+
+Complete the frontend, validation, step types, branches, versioning, audience filters and launch preview.
+
+### Phase 5 — Background execution
+
+Complete persistent scheduling, delayed steps, Cloudflare Queues integration, worker retries, recovery, rate limits, execution locks and reconciliation.
+
+### Phase 6 — Reply and automation processing
+
+Complete inbound synchronization, contact matching, reply stopping rules, AI classification, bounce handling, suppression and CRM updates.
+
+### Phase 7 — Analytics
+
+Complete step-level reporting, sequence statistics, delivery events and sender health.
+
+### Phase 8 — MCP and permissions
+
+Complete AI tools, authorization, read and write operations and approval workflows.
+
+### Phase 9 — Production hardening
+
+Perform security tests, failure tests, load tests, recovery tests, runtime compatibility checks and end-to-end verification.
+
+Do not claim production readiness simply because the application builds.
+
+---
+
+# PART 14 — REQUIRED ACCEPTANCE TESTS
+
+Create automated tests for these scenarios.
+
+1. A contact cannot be enrolled twice into a conflicting active sequence.
+2. A sequence can be created, edited, saved as draft and launched.
+3. Individual enrollments maintain independent progress.
+4. Delay steps schedule the next step at the correct time.
+5. Branch steps follow the correct conditions.
+6. A human reply stops future steps according to the configured policy.
+7. An out-of-office reply is not misclassified as positive engagement.
+8. An unsubscribe blocks all applicable queued sends.
+9. A hard bounce suppresses the recipient.
+10. A temporary error can be retried safely.
+11. A permanent sending error does not trigger infinite retries.
+12. A worker restart does not execute the same step twice.
+13. A missing queue message can be recovered from durable database state.
+14. Two workers cannot execute the same enrollment step concurrently.
+15. A mailbox disconnection pauses affected sends safely.
+16. A reconnect resumes eligible work without duplicating previous messages.
+17. A sent email is represented correctly in the Sent folder.
+18. An inbound reply is connected to the correct contact and conversation.
+19. Unmatched messages remain available for review.
+20. Missing email personalization variables block sending.
+21. Daily sender limits are enforced.
+22. Time zones and daylight-saving changes are handled correctly.
+23. Disabled sequences cannot send.
+24. SMTP acceptance is never falsely represented as confirmed delivery.
+25. Opens and clicks are not treated as reliable human intent without qualification.
+26. MCP tools cannot bypass user permissions.
+27. Invalid and replayed webhook events are safely rejected or deduplicated.
+28. Attachment and message parsing cannot execute untrusted content.
+29. Global suppression is checked at the final sending boundary.
+30. Dry-run mode never performs a real send.
+
+Include integration tests using a controlled test mailbox and a mock provider for regular automated testing.
+
+Never test campaign sending using the real EIDEN prospect database.
+
+---
+
+# PART 15 — PRODUCTION READINESS
+
+Before declaring the email platform complete, verify:
+
+- No missing backend actions behind important UI buttons.
+- No fake events or fabricated analytics.
+- No unresolved sequence execution states.
+- No plaintext mailbox credentials.
+- No unrestricted access to email threads.
+- No missing suppression checks.
+- No unlimited retries.
+- No unmonitored scheduled jobs.
+- No assumptions that the queue is permanent storage.
+- No incorrect delivery metrics.
+- No duplicate sending under concurrency.
+- No critical security findings left undocumented.
+- No missing operational alerting.
+- No untested backup and recovery procedure.
+
+Document:
+
+- Email provider configuration.
+- Cloudflare deployment and bindings.
+- Environment variables.
+- SPF, DKIM and DMARC configuration instructions.
+- Mailbox setup instructions.
+- Worker scheduling.
+- Queue configuration.
+- Recovery procedures.
+- Sending limits.
+- Monitoring and alerting.
+- Security and data-retention policies.
+
+Verify the deployment compatibility of each package and runtime.
+
+Vercel Hobby cron is limited to daily execution, so do not rely on it for minute-level mailbox synchronization or email scheduling. Additionally, Vercel Hobby is restricted to personal, non-commercial use. Flag this deployment restriction for EIDEN and do not claim a compliant production deployment unless the plan and use comply.
+
+Use Cloudflare Workers for the background engine only after proving that the actual email libraries and provider connections work in that environment.
+
+---
+
+# PART 16 — FINAL EXECUTION RULES
+
+The repository's actual existing architecture is the source of truth.
+
+Do not replace the complete email system with a fresh implementation without first proving that the existing implementation is unusable.
+
+Do not remove working features.
+
+Do not introduce unnecessary dependencies or paid providers.
+
+Do not invent provider capabilities.
+
+Do not fabricate delivery status or analytics.
+
+Do not expose secrets.
+
+Do not send real campaigns or messages to external prospects.
+
+Do not commit, push, deploy, overwrite unrelated work or modify production data unless explicitly authorized.
+
+Do not stop after analysis: once the audit is documented, start implementing the highest-priority verified gaps.
+
+Run tests after every meaningful implementation phase.
+
+Keep a clear record of completed work and remaining work.
+
+## FINAL REPORT
+
+At the end, provide:
+
+1. Repository audit summary.
+2. Existing functionality preserved.
+3. Problems discovered.
+4. Features implemented.
+5. Files and database migrations changed.
+6. Provider and mailbox integration results.
+7. Background worker and queue results.
+8. Sequence builder and execution results.
+9. Reply detection and suppression test results.
+10. Security and permission test results.
+11. Build, lint, type-check and automated-test results.
+12. Features still incomplete and exact reasons.
+13. Required environment variables and provider credentials.
+14. Remaining blockers before real production use.
+
+For every important claim, provide the actual file path, test name, command output or provider-integration evidence supporting it.
+
+**ULTIMATE OBJECTIVE**
+
+Make EIDEN Reach's email system behave like a reliable professional sales-engagement platform:
+
+A salesperson should be able to connect their custom-domain mailbox, manage all emails through EIDEN Reach, create personalized multi-step sequences, enroll qualified contacts, send messages automatically according to configured schedules, receive and synchronize replies, automatically stop or branch sequences, manage follow-ups in the CRM, monitor delivery and sender health, and use Claude or ChatGPT to work with the entire system through secure MCP tools.
+
+Every important operation must work in the actual backend. The sequence builder, mailbox, email engine, database, background workers, CRM and analytics must operate as one consistent system.
+
+Begin with the repository audit and continue into implementation. Do not settle for a visually complete but functionally incomplete application.
