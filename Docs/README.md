@@ -2,6 +2,7 @@
 
 Files:
 - `design.md` — product design system and screen specifications.
+- `system-overview.md` — full system documentation: motivation, architecture, data flow, sequences, KPIs, workflows, and glossary.
 - `logo-prompt.md` — ready-to-use prompt for generating distinct logo directions.
 - `index.html` — standalone interactive UI preview. Open in a browser; no build step or external assets are required.
 - `dashboard-preview.png` — desktop dashboard screenshot.
