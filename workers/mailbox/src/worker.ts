@@ -4,6 +4,7 @@ import {
   listImapFolders,
   MailboxProtocolError,
   searchImapUids,
+  sendSmtpEmail,
   verifyMailboxCredentials,
 } from './protocols'
 import { mapParsedEmail } from './mail-mapping'
@@ -168,7 +169,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       return response({ mailboxes: await result.json() }, 200, origin, env)
     }
 
-    if (request.method !== 'POST' || !['/mailboxes/test', '/mailboxes', '/mailboxes/sync'].includes(url.pathname)) {
+    if (request.method !== 'POST' || !['/mailboxes/test', '/mailboxes', '/mailboxes/sync', '/mailboxes/test-send'].includes(url.pathname)) {
       return response({ error: 'Not found.' }, 404, origin, env)
     }
     if (url.pathname === '/mailboxes/sync') {
@@ -327,6 +328,57 @@ async function handle(request: Request, env: Env): Promise<Response> {
           ? `Synchronized ${synchronizedMessages} messages. More messages are available for the next batch.`
           : `Synchronized ${synchronizedMessages} messages.`,
       }, 200, origin, env)
+    }
+
+    if (url.pathname === '/mailboxes/test-send') {
+      const rawText = await request.text()
+      let value: unknown
+      try { value = JSON.parse(rawText) } catch { return response({ error: 'Invalid request body.' }, 400, origin, env) }
+      const body = value as { organizationId?: unknown; mailboxId?: unknown; to?: unknown; subject?: unknown; text?: unknown }
+      if (typeof body.organizationId !== 'string' || !uuidPattern.test(body.organizationId)) return response({ error: 'A valid workspace is required.' }, 400, origin, env)
+      if (typeof body.mailboxId !== 'string' || !uuidPattern.test(body.mailboxId)) return response({ error: 'A valid mailbox is required.' }, 400, origin, env)
+      if (typeof body.to !== 'string' || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(body.to)) return response({ error: 'A valid recipient is required.' }, 400, origin, env)
+      const subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 300) : 'EIDEN Reach test message'
+      const text = typeof body.text === 'string' ? body.text.slice(0, 20000) : 'This is a controlled SMTP verification message from EIDEN Reach.'
+      const membership = await getMembership(env, body.organizationId, identity.id)
+      if (!membership || !rolesAllowed.has(membership.role)) return response({ error: 'You do not have permission to send from this mailbox.' }, 403, origin, env)
+
+      const accountUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/mailbox_accounts`)
+      accountUrl.searchParams.set('select', 'id,organization_id,owner_id,email_address')
+      accountUrl.searchParams.set('id', `eq.${body.mailboxId}`)
+      accountUrl.searchParams.set('organization_id', `eq.${body.organizationId}`)
+      accountUrl.searchParams.set('limit', '1')
+      const accountRes = await fetch(accountUrl, { headers: serviceHeaders(env) })
+      if (!accountRes.ok) return response({ error: 'Mailbox could not be loaded.' }, 503, origin, env)
+      const accounts = await accountRes.json() as Array<{ id: string; organization_id: string; owner_id: string; email_address: string }>
+      const account = accounts[0]
+      if (!account) return response({ error: 'Mailbox not found.' }, 404, origin, env)
+      if (account.owner_id !== identity.id && !['super_admin', 'sales_manager'].includes(membership.role)) return response({ error: 'You do not own this mailbox.' }, 403, origin, env)
+
+      const credUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/mailbox_credential_refs`)
+      credUrl.searchParams.set('select', 'key_version,nonce,credential_ciphertext')
+      credUrl.searchParams.set('mailbox_account_id', `eq.${body.mailboxId}`)
+      credUrl.searchParams.set('limit', '1')
+      const credRes = await fetch(credUrl, { headers: serviceHeaders(env) })
+      if (!credRes.ok) return response({ error: 'Mailbox credentials could not be loaded.' }, 503, origin, env)
+      const creds = await credRes.json() as Array<{ key_version: string; nonce: string; credential_ciphertext: string }>
+      const cred = creds[0]
+      if (!cred) return response({ error: 'Mailbox credentials are missing.' }, 404, origin, env)
+
+      let password: string
+      try {
+        password = await decryptCredentials(env, account.organization_id, account.email_address, { key_version: cred.key_version, nonce: cred.nonce, ciphertext: cred.credential_ciphertext })
+      } catch {
+        return response({ error: 'Mailbox credentials could not be decrypted.' }, 503, origin, env)
+      }
+
+      try {
+        const result = await sendSmtpEmail({ address: account.email_address, password, from: account.email_address, to: body.to, subject, text })
+        return response({ ok: true, mailboxId: body.mailboxId, recipient: body.to, port: result.port, tlsMode: result.tlsMode, message: 'Message accepted by SMTP.' }, 200, origin, env)
+      } catch (error) {
+        const code = error instanceof MailboxProtocolError ? error.code : 'send_failed'
+        return response({ error: 'Message could not be sent.', code }, 422, origin, env)
+      }
     }
 
     const input = await parseInput(request)
