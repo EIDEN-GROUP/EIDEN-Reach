@@ -280,6 +280,13 @@ code, kbd { font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
 .status-chip-completed { background:#efeff0; color:#3a3a3c; border-color:#d9d9dc; }
 .status-chip-unsubscribed { background:#fbe9e8; color:#7a2a22; border-color:#f3c4bf; }
 .status-chip-bounced { background:#f1e9fb; color:#4b2c7a; border-color:#d6bbef; }
+.preflight-panel { border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; margin:10px 0; background:#fafafa; }
+.preflight-panel h4 { margin:0 0 6px; font-size:13px; letter-spacing:.04em; }
+.preflight-panel ol { list-style:none; margin:0; padding:0; display:grid; gap:4px; }
+.preflight-ok { color:#137333; }
+.preflight-warn { color:#b45309; }
+.enroll-dialog { border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; margin:10px 0; background:#fff; }
+.dialog-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:8px; }
 .attachment-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 0 0 39px; }
 .attachment-list > span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; color: #40534a; background: #f4f6f1; border: 1px solid var(--line); border-radius: 6px; font-size: 9px; }
 .attachment-list small { color: var(--muted); }

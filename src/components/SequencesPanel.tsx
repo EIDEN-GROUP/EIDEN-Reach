@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 
-type Sequence = { id: string; name: string; description: string | null; status: string; category: string; current_version: number; daily_limit: number | null; archived_at: string | null }
+type Sequence = { id: string; name: string; description: string | null; status: string; category: string; current_version: number; daily_limit: number | null; archived_at: string | null; sender_mailbox_id: string | null }
 type Step = { id: string; position: number; kind: string; delay_minutes: number; business_days_only: boolean; time_zone_policy: string; template_id: string | null }
 type Enrollment = { id: string; contact_id: string; state: string; enrolled_at: string; next_step_position: number; next_run_at: string | null; stopped_at: string | null; stop_reason: string | null; contacts: { first_name: string; last_name: string; email: string | null } | null }
 
@@ -13,10 +13,16 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   const [selectedId, setSelectedId] = useState('')
   const [steps, setSteps] = useState<Step[]>([])
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
+  const [mailboxes, setMailboxes] = useState<{ id: string; email_address: string; display_name: string | null }[]>([])
+  const [contacts, setContacts] = useState<{ id: string; first_name: string; last_name: string; email: string | null }[]>([])
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('sales')
-  const [draft, setDraft] = useState({ name: '', description: '', status: 'draft', dailyLimit: '' })
+  const [draft, setDraft] = useState({ name: '', description: '', status: 'draft', dailyLimit: '', senderMailboxId: '' })
+  const [templateLoading, setTemplateLoading] = useState(false)
+  const [enrollDialogOpen, setEnrollDialogOpen] = useState(false)
+  const [enrollContactId, setEnrollContactId] = useState('')
+  const [enrollError, setEnrollError] = useState('')
   const [stepKind, setStepKind] = useState('email')
   const [stepDelay, setStepDelay] = useState('0')
   const [stepBusinessDays, setStepBusinessDays] = useState(false)
@@ -34,13 +40,27 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       if (membership.error || !membership.data) { setError('Your account is not assigned to a workspace.'); setLoading(false); return }
       setOrgId(membership.data.organization_id)
       const [seqRes, tplRes] = await Promise.all([
-        supabase!.from('sequences').select('id,name,description,status,category,current_version,daily_limit,archived_at').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name'),
+        supabase!.from('sequences').select('id,name,description,status,category,current_version,daily_limit,archived_at,sender_mailbox_id').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name'),
         supabase!.from('email_templates').select('id,name').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name'),
       ])
       if (!active) return
       if (seqRes.error || tplRes.error) setError('Sequences or templates could not be loaded.')
       else { setSequences(seqRes.data ?? []); setTemplates(tplRes.data ?? []) }
       setLoading(false)
+
+      // Load mailbox proxies and contacts
+      if (active) {
+        const fetched = {
+          mb: await supabase!.from('mailbox_accounts').select('id,email_address,display_name').eq('organization_id', membership.data.organization_id).is('disconnected_at', null).order('created_at'),
+          contacts: await supabase!.from('contacts').select('id,first_name,last_name,email').eq('organization_id', membership.data.organization_id).is('archived_at', null).limit(500).order('first_name'),
+        }
+        if (active) {
+          if (fetched.mb.error) setError('Mailboxes could not be loaded.')
+          else setMailboxes(fetched.mb.data ?? [])
+          if (fetched.contacts.error) setError('Contacts could not be loaded.')
+          else setContacts(fetched.contacts.data ?? [])
+        }
+      }
     })()
     return () => { active = false }
   }, [userId])
@@ -100,7 +120,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
 
   function select(seq: Sequence) {
     setSelectedId(seq.id)
-    setDraft({ name: seq.name, description: seq.description ?? '', status: seq.status, dailyLimit: seq.daily_limit?.toString() ?? '' })
+    setDraft({ name: seq.name, description: seq.description ?? '', status: seq.status, dailyLimit: seq.daily_limit?.toString() ?? '', senderMailboxId: seq.sender_mailbox_id ?? '' })
   }
 
   async function update(event: FormEvent<HTMLFormElement>) {
@@ -114,7 +134,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       setSaving(false)
       return
     }
-    const result = await supabase!.from('sequences').update({ name: draft.name.trim(), description: draft.description.trim() || null, status: draft.status, daily_limit: dailyLimit }).eq('id', selected.id).eq('organization_id', orgId).select('id,name,description,status,category,current_version,daily_limit,archived_at').single()
+    const result = await supabase!.from('sequences').update({ name: draft.name.trim(), description: draft.description.trim() || null, status: draft.status, daily_limit: dailyLimit, sender_mailbox_id: draft.senderMailboxId || null }).eq('id', selected.id).eq('organization_id', orgId).select('id,name,description,status,category,current_version,daily_limit,archived_at,sender_mailbox_id').single()
     if (result.error) {
       const message = result.error.message
       setError(message.includes('at least one step') ? 'Add at least one step before activating this sequence.' : message.includes('requires a template') ? 'Every email step needs a template before activation.' : 'Sequence changes could not be saved.')
@@ -122,14 +142,62 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     setSaving(false)
   }
 
+  
   async function archive(seq: Sequence) {
     if (!canWrite || !window.confirm(`Archive ${seq.name}?`)) return
     setSaving(true)
-    setError('')
-    const result = await supabase!.from('sequences').update({ archived_at: new Date().toISOString(), status: 'archived' }).eq('id', seq.id).eq('organization_id', orgId)
-    if (result.error) setError('Sequence could not be archived.')
-    else { setSequences(current => current.filter(s => s.id !== seq.id)); if (selectedId === seq.id) setSelectedId('') }
+    setError("")
+    const result = await supabase!.from("sequences").update({ archived_at: new Date().toISOString(), status: "archived" }).eq("id", seq.id).eq("organization_id", orgId)
+    if (result.error) setError("Sequence could not be archived.")
+    else { setSequences(current => current.filter(s => s.id !== seq.id)); if (selectedId === seq.id) setSelectedId("") }
     setSaving(false)
+  }
+
+  async function useStandardTemplate() {
+    if (!canWrite || !orgId) return
+    setTemplateLoading(true)
+    setError('')
+    try {
+      const stepsSpec = [
+        { day: 1, subject: 'A possible opportunity for {{company}}', template: 'MeetIntroDay1' },
+        { day: 4, subject: 'Re: A possible opportunity for {{company}}', template: 'MeetFollow1Day4' },
+        { day: 8, subject: 'An idea for {{company}}', template: 'MeetValueDay8' },
+        { day: 13, subject: 'Is this something you are considering?', template: 'MeetObjDay13' },
+        { day: 20, subject: 'Should I close this for now?', template: 'MeetCloseDay20' },
+      ]
+      const templateIds: Record<number, string> = {}
+      for (const spec of stepsSpec) {
+        const fetched = await supabase!.from('email_templates').select('id').eq('organization_id', orgId).eq('name', spec.template).maybeSingle()
+        let id = fetched.data?.id
+        if (!id) {
+          const inserted = await supabase!.from('email_templates').insert({ organization_id: orgId, owner_id: userId, name: spec.template, subject: spec.subject, text_body: `Hi {{first_name}},\n\nThis is a personal follow-up for your company {{company}}.\n\nBest regards,\n{{sender_name}}`, category: 'sales' }).select('id').single()
+          if (inserted.error) throw inserted.error
+          id = inserted.data.id
+        }
+        templateIds[spec.day] = id
+      }
+      const seqRes = await supabase!.rpc('create_sequence_with_version', { target_organization: orgId, target_name: 'Standard B2B Outreach', target_description: 'Five-email default: Days 1, 4, 8, 13, 20. Stop on reply.', target_category: 'sales' }).single()
+      if (seqRes.error) throw seqRes.error
+      const newSeqId = (seqRes.data as { id: string }).id
+      let prevDay = 1
+      for (let i = 0; i < stepsSpec.length; i++) {
+        const spec = stepsSpec[i]
+        const delay = i === 0 ? 0 : (spec.day - prevDay) * 24 * 60
+        prevDay = spec.day
+        const inserted = await supabase!.from('sequence_steps').insert({ sequence_id: newSeqId, version: 1, position: i, kind: 'email', delay_minutes: delay, business_days_only: true, time_zone_policy: 'contact', template_id: templateIds[spec.day], configuration: {} })
+        if (inserted.error) throw inserted.error
+      }
+      const fetched = await supabase!.from('sequences').select('id,name,description,status,category,current_version,daily_limit,archived_at,sender_mailbox_id').eq('id', newSeqId).maybeSingle()
+      if (fetched.data) {
+        setSequences(current => [...current, fetched.data as unknown as Sequence].sort((a, b) => a.name.localeCompare(b.name)))
+        setSelectedId(newSeqId)
+        setDraft({ name: fetched.data.name, description: fetched.data.description ?? '', status: fetched.data.status, dailyLimit: fetched.data.daily_limit?.toString() ?? '', senderMailboxId: fetched.data.sender_mailbox_id ?? '' })
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Standard template could not be created.')
+    } finally {
+      setTemplateLoading(false)
+    }
   }
 
   async function addStep() {
@@ -151,6 +219,38 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     if (result.error) setError('Step could not be deleted.')
     else setSteps(current => current.filter(s => s.id !== step.id))
     setSaving(false)
+  }
+
+  async function enrollContact() {
+    if (!canWrite || !selected || !enrollContactId) return
+    setEnrollError('')
+    const duplicate = enrollments.some(enrollment => enrollment.contact_id === enrollContactId && ['pending', 'active', 'waiting', 'sending', 'paused'].includes(enrollment.state))
+    if (duplicate) { setEnrollError('Contact already enrolled and active in this sequence.'); return }
+    setSaving(true)
+    try {
+      const inserted = await supabase!.from('sequence_enrollments').insert({
+        organization_id: orgId,
+        sequence_id: selected.id,
+        sequence_version: selected.current_version,
+        contact_id: enrollContactId,
+        owner_id: userId,
+        state: 'active',
+        enrolled_at: new Date().toISOString(),
+        next_step_position: 0,
+        next_run_at: new Date().toISOString(),
+        created_by: userId,
+      }).select('id,contact_id,state,enrolled_at,next_step_position,next_run_at,stopped_at,stop_reason,contacts:contact_id(first_name,last_name,email)').single()
+      if (inserted.error) {
+        if (inserted.error.message.includes('violation') || inserted.error.message.includes('duplicate')) setEnrollError('Contact already enrolled in this sequence.')
+        else setEnrollError(inserted.error.message)
+      } else {
+        setEnrollments(current => [inserted.data as unknown as Enrollment, ...current])
+        setEnrollContactId('')
+        setEnrollDialogOpen(false)
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
   function statusClass(state: string) {
@@ -175,8 +275,19 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     stopped: enrollments.filter(e => e.stopped_at).length,
   }
 
+  const preflight = selected ? [
+    { label: 'SENDER', ok: !!draft.senderMailboxId || !!selected.sender_mailbox_id, detail: (mailboxes.find(m => m.id === (draft.senderMailboxId || selected.sender_mailbox_id))?.email_address ?? 'No mailbox selected') },
+    { label: 'MAILBOX', ok: mailboxes.length > 0, detail: mailboxes.length ? `${mailboxes.length} mailbox(es) connected` : 'No mailbox connected' },
+    { label: 'STATUS', ok: selected.status === 'active', detail: selected.status },
+    { label: 'STEPS', ok: steps.length > 0, detail: `${steps.length} step(s) · ${steps.filter(s => s.kind === 'email').length} email(s)` },
+    { label: 'DAILY LIMIT', ok: !draft.dailyLimit || (Number.isInteger(Number(draft.dailyLimit)) && Number(draft.dailyLimit) > 0), detail: draft.dailyLimit ? `${draft.dailyLimit}/day` : 'No limit set' },
+    { label: 'ENROLLMENTS', ok: enrollments.length > 0, detail: `${enrollmentSummary.total} total · ${enrollmentSummary.active} active · ${enrollmentSummary.replied} replied` },
+    { label: 'STOP RULES', ok: true, detail: 'Stop on reply · Stop on bounce/unsubscribe · Pause on OOO' },
+    { label: 'ADVANCED', ok: true, detail: 'Company-level stop per guide · Business days + contact timezone' },
+  ] : []
+
   return <section className="panel contacts-panel">
-    <div className="panel-heading"><div><h2>Sequences</h2><p>Multi-step sales follow-up. Sending is not enabled yet.</p></div></div>
+    <div className="panel-heading"><div><h2>Sequences</h2><p>Multi-step sales follow-up with automatic stop on reply.</p></div><button className="secondary-button" type="button" disabled={saving || !orgId} onClick={() => useStandardTemplate()}>{templateLoading ? 'Creating…' : 'Use 5-email template'}</button></div>
     {error && <p className="inline-error" role="alert">{error}</p>}
     {canWrite && <form className="contact-form" onSubmit={create}>
       <label>Name<input value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
@@ -192,6 +303,8 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
         <label>Description<input value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} maxLength={500} /></label>
         <label>Status<select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })}><option value="draft">draft</option><option value="active">active</option><option value="paused">paused</option></select></label>
         <label>Daily limit<input inputMode="numeric" value={draft.dailyLimit} onChange={e => setDraft({ ...draft, dailyLimit: e.target.value })} placeholder="Optional" /></label>
+        <label>Sender mailbox<select value={draft.senderMailboxId} onChange={e => setDraft({ ...draft, senderMailboxId: e.target.value })}><option value="">Select mailbox</option>{mailboxes.map(mb => <option key={mb.id} value={mb.id}>{mb.display_name ? `${mb.display_name} <${mb.email_address}>` : mb.email_address}</option>)}</select></label>
+        <div className="preflight-panel"><h4>Preflight</h4><ol>{preflight.map(p => <li key={p.label} className={p.ok ? 'preflight-ok' : 'preflight-warn'}><b>{p.label}</b> — {p.detail} {p.ok ? '✓' : '⚠'}</li>)}</ol></div>
         <button className="primary-button" disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</button>
       </form> : <dl className="contact-readonly"><dt>Status</dt><dd>{selected.status}</dd><dt>Category</dt><dd>{selected.category}</dd></dl>}
       <div className="activity-timeline"><h4>Steps (v{selected.current_version})</h4>
@@ -206,7 +319,9 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
           <span className="status-chip status-chip-paused">Paused: {enrollmentSummary.paused}</span>
           <span className="status-chip status-chip-completed">Completed: {enrollmentSummary.completed}</span>
           <span className="status-chip">Total: {enrollmentSummary.total}</span>
+          {canWrite && selected.status === 'active' && <button className="secondary-button" type="button" onClick={() => { setEnrollDialogOpen(true); setEnrollError('') }}>Enroll contact</button>}
         </div>
+        {enrollDialogOpen && canWrite && <div className="enroll-dialog"><label>Contact<select value={enrollContactId} onChange={e => setEnrollContactId(e.target.value)}><option value="">Select a contact</option>{contacts.map(c => <option key={c.id} value={c.id}>{`${c.first_name} ${c.last_name}`.trim()} — {c.email ?? 'no email'}</option>)}</select></label>{enrollError && <p className="inline-error">{enrollError}</p>}<div className="dialog-actions"><button className="secondary-button" type="button" onClick={() => setEnrollDialogOpen(false)}>Cancel</button><button className="primary-button" type="button" disabled={saving || !enrollContactId} onClick={() => void enrollContact()}>{saving ? 'Enrolling…' : 'Enroll'}</button></div></div>}
         {enrollments.length ? <div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>Contact</th><th>State</th><th>Enrolled</th><th>Next run</th><th>Stop reason</th></tr></thead><tbody>{enrollments.map(enrollment => {
           const contact = enrollment.contacts
           const contactName = contact ? `${contact.first_name} ${contact.last_name}`.trim() : 'Unknown'
