@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
+import { AlertTriangle, CheckCircle2, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { EntityPage, RailCard, SlideOut } from './Overlay'
 
 type Sequence = { id: string; name: string; description: string | null; status: string; category: string; current_version: number; daily_limit: number | null; archived_at: string | null; sender_mailbox_id: string | null }
 type Step = { id: string; position: number; kind: string; delay_minutes: number; business_days_only: boolean; time_zone_policy: string; template_id: string | null }
 type Enrollment = { id: string; contact_id: string; state: string; enrolled_at: string; next_step_position: number; next_run_at: string | null; stopped_at: string | null; stop_reason: string | null; contacts: { first_name: string; last_name: string; email: string | null } | null }
+type Mailbox = { id: string; email_address: string; display_name: string | null }
+type Contact = { id: string; first_name: string; last_name: string; email: string | null }
+
+const SEQUENCE_COLUMNS = 'id,name,description,status,category,current_version,daily_limit,archived_at,sender_mailbox_id'
 
 export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite: boolean }) {
   const [orgId, setOrgId] = useState('')
@@ -13,14 +19,16 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   const [selectedId, setSelectedId] = useState('')
   const [steps, setSteps] = useState<Step[]>([])
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
-  const [mailboxes, setMailboxes] = useState<{ id: string; email_address: string; display_name: string | null }[]>([])
-  const [contacts, setContacts] = useState<{ id: string; first_name: string; last_name: string; email: string | null }[]>([])
+  const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('sales')
   const [draft, setDraft] = useState({ name: '', description: '', status: 'draft', dailyLimit: '', senderMailboxId: '' })
   const [templateLoading, setTemplateLoading] = useState(false)
-  const [enrollDialogOpen, setEnrollDialogOpen] = useState(false)
+  const [enrollOpen, setEnrollOpen] = useState(false)
+  const [stepOpen, setStepOpen] = useState(false)
   const [enrollContactId, setEnrollContactId] = useState('')
   const [enrollError, setEnrollError] = useState('')
   const [stepKind, setStepKind] = useState('email')
@@ -38,29 +46,26 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       const membership = await supabase!.from('memberships').select('organization_id').eq('user_id', userId).limit(1).maybeSingle()
       if (!active) return
       if (membership.error || !membership.data) { setError('Your account is not assigned to a workspace.'); setLoading(false); return }
-      setOrgId(membership.data.organization_id)
+      const organizationId = membership.data.organization_id
+      setOrgId(organizationId)
       const [seqRes, tplRes] = await Promise.all([
-        supabase!.from('sequences').select('id,name,description,status,category,current_version,daily_limit,archived_at,sender_mailbox_id').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name'),
-        supabase!.from('email_templates').select('id,name').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name'),
+        supabase!.from('sequences').select(SEQUENCE_COLUMNS).eq('organization_id', organizationId).is('archived_at', null).order('name'),
+        supabase!.from('email_templates').select('id,name').eq('organization_id', organizationId).is('archived_at', null).order('name'),
       ])
       if (!active) return
       if (seqRes.error || tplRes.error) setError('Sequences or templates could not be loaded.')
       else { setSequences(seqRes.data ?? []); setTemplates(tplRes.data ?? []) }
       setLoading(false)
 
-      // Load mailbox proxies and contacts
-      if (active) {
-        const fetched = {
-          mb: await supabase!.from('mailbox_accounts').select('id,email_address,display_name').eq('organization_id', membership.data.organization_id).is('disconnected_at', null).order('created_at'),
-          contacts: await supabase!.from('contacts').select('id,first_name,last_name,email').eq('organization_id', membership.data.organization_id).is('archived_at', null).limit(500).order('first_name'),
-        }
-        if (active) {
-          if (fetched.mb.error) setError('Mailboxes could not be loaded.')
-          else setMailboxes(fetched.mb.data ?? [])
-          if (fetched.contacts.error) setError('Contacts could not be loaded.')
-          else setContacts(fetched.contacts.data ?? [])
-        }
-      }
+      const [mailboxRes, contactRes] = await Promise.all([
+        supabase!.from('mailbox_accounts').select('id,email_address,display_name').eq('organization_id', organizationId).is('disconnected_at', null).order('created_at'),
+        supabase!.from('contacts').select('id,first_name,last_name,email').eq('organization_id', organizationId).is('archived_at', null).limit(500).order('first_name'),
+      ])
+      if (!active) return
+      if (mailboxRes.error) setError('Mailboxes could not be loaded.')
+      else setMailboxes(mailboxRes.data ?? [])
+      if (contactRes.error) setError('Contacts could not be loaded.')
+      else setContacts(contactRes.data ?? [])
     })()
     return () => { active = false }
   }, [userId])
@@ -110,11 +115,11 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     }).single()
     if (sequenceResult.error) {
       setError(sequenceResult.error.code === '23505' ? 'A sequence with that name already exists.' : 'Sequence could not be initialized.')
-      setSaving(false)
-      return
+    } else {
+      setSequences(current => [...current, sequenceResult.data as Sequence].sort((a, b) => a.name.localeCompare(b.name)))
+      setName(''); setDescription(''); setCategory('sales')
+      setCreateOpen(false)
     }
-    setSequences(current => [...current, sequenceResult.data as Sequence].sort((a, b) => a.name.localeCompare(b.name)))
-    setName(''); setDescription(''); setCategory('sales')
     setSaving(false)
   }
 
@@ -122,6 +127,8 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     setSelectedId(seq.id)
     setDraft({ name: seq.name, description: seq.description ?? '', status: seq.status, dailyLimit: seq.daily_limit?.toString() ?? '', senderMailboxId: seq.sender_mailbox_id ?? '' })
   }
+
+  function closeRecord() { setSelectedId('') }
 
   async function update(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -134,22 +141,24 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       setSaving(false)
       return
     }
-    const result = await supabase!.from('sequences').update({ name: draft.name.trim(), description: draft.description.trim() || null, status: draft.status, daily_limit: dailyLimit, sender_mailbox_id: draft.senderMailboxId || null }).eq('id', selected.id).eq('organization_id', orgId).select('id,name,description,status,category,current_version,daily_limit,archived_at,sender_mailbox_id').single()
+    const result = await supabase!.from('sequences').update({ name: draft.name.trim(), description: draft.description.trim() || null, status: draft.status, daily_limit: dailyLimit, sender_mailbox_id: draft.senderMailboxId || null }).eq('id', selected.id).eq('organization_id', orgId).select(SEQUENCE_COLUMNS).single()
     if (result.error) {
       const message = result.error.message
       setError(message.includes('at least one step') ? 'Add at least one step before activating this sequence.' : message.includes('requires a template') ? 'Every email step needs a template before activation.' : 'Sequence changes could not be saved.')
-    } else { setSequences(current => current.map(s => s.id === selected.id ? result.data as Sequence : s).sort((a, b) => a.name.localeCompare(b.name))); setSelectedId(result.data.id) }
+    } else {
+      setSequences(current => current.map(s => s.id === selected.id ? result.data as Sequence : s).sort((a, b) => a.name.localeCompare(b.name)))
+      select(result.data as Sequence)
+    }
     setSaving(false)
   }
 
-  
   async function archive(seq: Sequence) {
     if (!canWrite || !window.confirm(`Archive ${seq.name}?`)) return
     setSaving(true)
-    setError("")
-    const result = await supabase!.from("sequences").update({ archived_at: new Date().toISOString(), status: "archived" }).eq("id", seq.id).eq("organization_id", orgId)
-    if (result.error) setError("Sequence could not be archived.")
-    else { setSequences(current => current.filter(s => s.id !== seq.id)); if (selectedId === seq.id) setSelectedId("") }
+    setError('')
+    const result = await supabase!.from('sequences').update({ archived_at: new Date().toISOString(), status: 'archived' }).eq('id', seq.id).eq('organization_id', orgId)
+    if (result.error) setError('Sequence could not be archived.')
+    else { setSequences(current => current.filter(s => s.id !== seq.id)); if (selectedId === seq.id) setSelectedId('') }
     setSaving(false)
   }
 
@@ -187,11 +196,11 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
         const inserted = await supabase!.from('sequence_steps').insert({ sequence_id: newSeqId, version: 1, position: i, kind: 'email', delay_minutes: delay, business_days_only: true, time_zone_policy: 'contact', template_id: templateIds[spec.day], configuration: {} })
         if (inserted.error) throw inserted.error
       }
-      const fetched = await supabase!.from('sequences').select('id,name,description,status,category,current_version,daily_limit,archived_at,sender_mailbox_id').eq('id', newSeqId).maybeSingle()
+      const fetched = await supabase!.from('sequences').select(SEQUENCE_COLUMNS).eq('id', newSeqId).maybeSingle()
       if (fetched.data) {
-        setSequences(current => [...current, fetched.data as unknown as Sequence].sort((a, b) => a.name.localeCompare(b.name)))
-        setSelectedId(newSeqId)
-        setDraft({ name: fetched.data.name, description: fetched.data.description ?? '', status: fetched.data.status, dailyLimit: fetched.data.daily_limit?.toString() ?? '', senderMailboxId: fetched.data.sender_mailbox_id ?? '' })
+        const created = fetched.data as Sequence
+        setSequences(current => [...current, created].sort((a, b) => a.name.localeCompare(b.name)))
+        select(created)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Standard template could not be created.')
@@ -207,7 +216,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     setError('')
     const result = await supabase!.from('sequence_steps').insert({ sequence_id: selected.id, version: selected.current_version, position, kind: stepKind, delay_minutes: Number(stepDelay) || 0, business_days_only: stepBusinessDays, time_zone_policy: stepTimeZonePolicy, template_id: stepTemplateId || null, configuration: {} }).select('id,position,kind,delay_minutes,business_days_only,time_zone_policy,template_id').single()
     if (result.error) setError('Step could not be added.')
-    else setSteps(current => [...current, result.data as Step].sort((a, b) => a.position - b.position))
+    else { setSteps(current => [...current, result.data as Step].sort((a, b) => a.position - b.position)); setStepOpen(false) }
     setSaving(false)
   }
 
@@ -246,14 +255,14 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       } else {
         setEnrollments(current => [inserted.data as unknown as Enrollment, ...current])
         setEnrollContactId('')
-        setEnrollDialogOpen(false)
+        setEnrollOpen(false)
       }
     } finally {
       setSaving(false)
     }
   }
 
-  function statusClass(state: string) {
+  function stateClass(state: string) {
     switch (state) {
       case 'replied': return 'status-chip status-chip-replied'
       case 'active': return 'status-chip status-chip-active'
@@ -272,64 +281,128 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     replied: enrollments.filter(e => e.state === 'replied').length,
     paused: enrollments.filter(e => e.state === 'paused').length,
     completed: enrollments.filter(e => e.state === 'completed').length,
-    stopped: enrollments.filter(e => e.stopped_at).length,
   }
 
+  const senderId = draft.senderMailboxId || selected?.sender_mailbox_id || ''
+  const senderMailbox = mailboxes.find(m => m.id === senderId)
   const preflight = selected ? [
-    { label: 'SENDER', ok: !!draft.senderMailboxId || !!selected.sender_mailbox_id, detail: (mailboxes.find(m => m.id === (draft.senderMailboxId || selected.sender_mailbox_id))?.email_address ?? 'No mailbox selected') },
-    { label: 'MAILBOX', ok: mailboxes.length > 0, detail: mailboxes.length ? `${mailboxes.length} mailbox(es) connected` : 'No mailbox connected' },
-    { label: 'STATUS', ok: selected.status === 'active', detail: selected.status },
-    { label: 'STEPS', ok: steps.length > 0, detail: `${steps.length} step(s) · ${steps.filter(s => s.kind === 'email').length} email(s)` },
-    { label: 'DAILY LIMIT', ok: !draft.dailyLimit || (Number.isInteger(Number(draft.dailyLimit)) && Number(draft.dailyLimit) > 0), detail: draft.dailyLimit ? `${draft.dailyLimit}/day` : 'No limit set' },
-    { label: 'ENROLLMENTS', ok: enrollments.length > 0, detail: `${enrollmentSummary.total} total · ${enrollmentSummary.active} active · ${enrollmentSummary.replied} replied` },
-    { label: 'STOP RULES', ok: true, detail: 'Stop on reply · Stop on bounce/unsubscribe · Pause on OOO' },
-    { label: 'ADVANCED', ok: true, detail: 'Company-level stop per guide · Business days + contact timezone' },
+    { label: 'Sender', ok: !!senderId, detail: senderMailbox?.email_address ?? 'No mailbox selected' },
+    { label: 'Mailbox', ok: mailboxes.length > 0, detail: mailboxes.length ? `${mailboxes.length} connected` : 'No mailbox connected' },
+    { label: 'Status', ok: selected.status === 'active', detail: selected.status },
+    { label: 'Steps', ok: steps.length > 0, detail: `${steps.length} step(s), ${steps.filter(s => s.kind === 'email').length} email(s)` },
+    { label: 'Daily limit', ok: !draft.dailyLimit || (Number.isInteger(Number(draft.dailyLimit)) && Number(draft.dailyLimit) > 0), detail: draft.dailyLimit ? `${draft.dailyLimit} per day` : 'No limit set' },
+    { label: 'Enrollments', ok: enrollments.length > 0, detail: `${enrollmentSummary.total} total, ${enrollmentSummary.active} active, ${enrollmentSummary.replied} replied` },
+    { label: 'Stop rules', ok: true, detail: 'Stop on reply, bounce or unsubscribe. Pause on out-of-office.' },
   ] : []
 
-  return <section className="panel contacts-panel">
-    <div className="panel-heading"><div><h2>Sequences</h2><p>Multi-step sales follow-up with automatic stop on reply.</p></div><button className="secondary-button" type="button" disabled={saving || !orgId} onClick={() => useStandardTemplate()}>{templateLoading ? 'Creating…' : 'Use 5-email template'}</button></div>
+  const templateName = (id: string | null) => (id ? templates.find(t => t.id === id)?.name ?? 'Template' : 'No template')
+
+  return <section className="panel sequences-panel">
+    <div className="panel-heading">
+      <div><h2>Sequences</h2><p>Multi-step follow-up that stops automatically when a contact replies.</p></div>
+      {canWrite && <div className="panel-actions">
+        <button className="secondary-button" type="button" disabled={saving || templateLoading || !orgId} onClick={() => void useStandardTemplate()}>{templateLoading ? 'Creating…' : 'Use 5-email template'}</button>
+        <button className="primary-button" type="button" disabled={!orgId} onClick={() => setCreateOpen(true)}><Plus size={15} /> New sequence</button>
+      </div>}
+    </div>
     {error && <p className="inline-error" role="alert">{error}</p>}
-    {canWrite && <form className="contact-form" onSubmit={create}>
-      <label>Name<input value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
-      <label>Description<input value={description} onChange={e => setDescription(e.target.value)} maxLength={500} placeholder="Optional" /></label>
-      <label>Category<select value={category} onChange={e => setCategory(e.target.value)}><option value="sales">sales</option><option value="marketing">marketing</option></select></label>
-      <button className="primary-button" disabled={saving || !orgId}>{saving ? 'Saving...' : 'Create sequence'}</button>
-    </form>}
-    {loading ? <div className="table-message">Loading sequences...</div> : sequences.length ? <div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>Name</th><th>Status</th><th>Version</th><th>Action</th></tr></thead><tbody>{sequences.map(seq => <tr key={seq.id}><td><button className="text-action" onClick={() => select(seq)}>{seq.name}</button></td><td>{seq.status}</td><td>v{seq.current_version}</td><td>{canWrite && <button className="archive-button" type="button" onClick={() => void archive(seq)}>Archive</button>}</td></tr>)}</tbody></table></div> : !error && <div className="table-message">No sequences yet. {canWrite ? 'Create one above.' : 'No sequences are available.'}</div>}
-    {selected && <section className="contact-editor" aria-label="Sequence details">
-      <div className="editor-heading"><div><h3>{selected.name}</h3><p>Sequence v{selected.current_version} · {selected.status}</p></div><button className="secondary-button" type="button" onClick={() => setSelectedId('')}>Close</button></div>
-      {canWrite ? <form className="contact-form" onSubmit={update}>
-        <label>Name<input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} required maxLength={200} /></label>
-        <label>Description<input value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} maxLength={500} /></label>
-        <label>Status<select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })}><option value="draft">draft</option><option value="active">active</option><option value="paused">paused</option></select></label>
-        <label>Daily limit<input inputMode="numeric" value={draft.dailyLimit} onChange={e => setDraft({ ...draft, dailyLimit: e.target.value })} placeholder="Optional" /></label>
-        <label>Sender mailbox<select value={draft.senderMailboxId} onChange={e => setDraft({ ...draft, senderMailboxId: e.target.value })}><option value="">Select mailbox</option>{mailboxes.map(mb => <option key={mb.id} value={mb.id}>{mb.display_name ? `${mb.display_name} <${mb.email_address}>` : mb.email_address}</option>)}</select></label>
-        <div className="preflight-panel"><h4>Preflight</h4><ol>{preflight.map(p => <li key={p.label} className={p.ok ? 'preflight-ok' : 'preflight-warn'}><b>{p.label}</b> — {p.detail} {p.ok ? '✓' : '⚠'}</li>)}</ol></div>
-        <button className="primary-button" disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</button>
-      </form> : <dl className="contact-readonly"><dt>Status</dt><dd>{selected.status}</dd><dt>Category</dt><dd>{selected.category}</dd></dl>}
-      <div className="activity-timeline"><h4>Steps (v{selected.current_version})</h4>
-        {canWrite && selected.status === 'draft' && <div className="contact-form"><label>Kind<select value={stepKind} onChange={e => setStepKind(e.target.value)}><option value="email">email</option><option value="wait">wait</option><option value="task">task</option><option value="condition">condition</option></select></label><label>Delay (minutes)<input inputMode="numeric" value={stepDelay} onChange={e => setStepDelay(e.target.value)} /></label><label>Business days only<input type="checkbox" checked={stepBusinessDays} onChange={e => setStepBusinessDays(e.target.checked)} /></label><label>Time zone<select value={stepTimeZonePolicy} onChange={e => setStepTimeZonePolicy(e.target.value)}><option value="contact">contact</option><option value="workspace">workspace</option><option value="utc">utc</option></select></label><label>Template<select value={stepTemplateId} onChange={e => setStepTemplateId(e.target.value)}><option value="">No template</option>{templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label><button className="primary-button" type="button" disabled={saving} onClick={() => void addStep()}>{saving ? 'Adding...' : 'Add step'}</button></div>}
-        {selected.status !== 'draft' && <p>Pause this sequence and create a new version before changing its steps.</p>}
-        {steps.length ? <ol>{steps.map(step => <li key={step.id}><div><b>{step.kind}</b> · delay {step.delay_minutes} min {step.business_days_only ? '· business days' : ''} · {step.time_zone_policy} {step.template_id ? `· template ${templates.find(t => t.id === step.template_id)?.name ?? step.template_id}` : ''}</div>{canWrite && selected.status === 'draft' && <button className="text-action" type="button" onClick={() => void removeStep(step)}>Delete</button>}</li>)}</ol> : <p>No steps have been added to this version.</p>}
+    {loading ? <div className="table-message">Loading sequences...</div> : sequences.length ? <div className="contact-table-wrap"><table className="contact-table">
+      <thead><tr><th>Name</th><th>Status</th><th>Version</th><th aria-label="Actions" /></tr></thead>
+      <tbody>{sequences.map(seq => <tr key={seq.id}>
+        <td><button className="text-action" type="button" onClick={() => select(seq)}>{seq.name}</button></td>
+        <td><span className={stateClass(seq.status === 'active' ? 'active' : seq.status === 'paused' ? 'paused' : 'pending')}>{seq.status}</span></td>
+        <td>v{seq.current_version}</td>
+        <td className="row-actions">{canWrite && <button className="archive-button" type="button" disabled={saving} onClick={() => void archive(seq)}>Archive</button>}</td>
+      </tr>)}</tbody>
+    </table></div> : <div className="table-message">No sequences yet. {canWrite ? 'Create one, or start from the 5-email template.' : 'No sequences are available.'}</div>}
+
+    <SlideOut open={createOpen} onClose={() => setCreateOpen(false)} title="New sequence" description="Give the sequence a name. You add steps and a sender next.">
+      <form className="slideout-form" onSubmit={create}>
+        <label>Name<input value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
+        <label>Description<input value={description} onChange={e => setDescription(e.target.value)} maxLength={500} placeholder="Optional" /></label>
+        <label>Category<select value={category} onChange={e => setCategory(e.target.value)}><option value="sales">Sales</option><option value="marketing">Marketing</option></select></label>
+        <div className="slideout-actions"><button className="secondary-button" type="button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button" disabled={saving || !orgId || !name.trim()}>{saving ? 'Saving…' : 'Create sequence'}</button></div>
+      </form>
+    </SlideOut>
+
+    <EntityPage open={!!selected} onClose={closeRecord} kicker="Sequences" title={selected?.name ?? ''}
+      sidebar={selected ? <>
+        <RailCard title="Summary" rows={[['Status', selected.status], ['Version', `v${selected.current_version}`], ['Sender', senderMailbox?.email_address], ['Daily limit', selected.daily_limit ?? 'No limit'], ['Enrolled', enrollmentSummary.total], ['Replied', enrollmentSummary.replied]]} />
+        <section className="rail-card">
+          <h2 className="rail-card-title">Preflight</h2>
+          <ul className="check-list">{preflight.map(item => <li key={item.label} className={item.ok ? 'check-ok' : 'check-warn'}>
+            {item.ok ? <CheckCircle2 size={15} aria-hidden="true" /> : <AlertTriangle size={15} aria-hidden="true" />}
+            <div><b>{item.label}</b><span>{item.detail}</span></div>
+          </li>)}</ul>
+        </section>
+      </> : undefined}>
+      {selected && <>
+        <section className="record-card">
+          <div className="record-card-head"><h3>Details</h3></div>
+          <form className="form-grid" onSubmit={update}>
+            <label className="span-2">Name<input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} required maxLength={200} disabled={!canWrite} /></label>
+            <label className="span-2">Description<input value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} maxLength={500} disabled={!canWrite} /></label>
+            <label>Status<select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })} disabled={!canWrite}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option></select></label>
+            <label>Daily limit<input inputMode="numeric" value={draft.dailyLimit} onChange={e => setDraft({ ...draft, dailyLimit: e.target.value })} placeholder="No limit" disabled={!canWrite} /></label>
+            <label className="span-2">Sender mailbox<select value={draft.senderMailboxId} onChange={e => setDraft({ ...draft, senderMailboxId: e.target.value })} disabled={!canWrite}><option value="">Select a mailbox</option>{mailboxes.map(mb => <option key={mb.id} value={mb.id}>{mb.display_name ? `${mb.display_name} <${mb.email_address}>` : mb.email_address}</option>)}</select></label>
+            {canWrite && <div className="form-actions span-2"><button className="primary-button" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button></div>}
+          </form>
+        </section>
+
+        <section className="record-card">
+          <div className="record-card-head"><h3>Steps</h3><span className="record-card-meta">Version {selected.current_version}</span>{canWrite && selected.status === 'draft' && <button className="secondary-button" type="button" onClick={() => setStepOpen(true)}><Plus size={15} /> Add step</button>}</div>
+          {selected.status !== 'draft' && <p className="record-card-note">Pause this sequence and create a new version before changing its steps.</p>}
+          {steps.length ? <ol className="step-list">{steps.map((step, index) => <li key={step.id} className="step-row">
+            <span className="step-index">{index + 1}</span>
+            <div className="step-body">
+              <b>{step.kind === 'email' ? 'Send email' : step.kind === 'wait' ? 'Wait' : step.kind === 'task' ? 'Create task' : 'Condition'}</b>
+              <span>{step.delay_minutes === 0 ? 'Immediately' : `After ${Math.round(step.delay_minutes / 1440)} day(s)`}{step.business_days_only ? ', business days' : ''} · {step.time_zone_policy} time zone · {templateName(step.template_id)}</span>
+            </div>
+            {canWrite && selected.status === 'draft' && <button className="icon-only" type="button" aria-label="Delete step" disabled={saving} onClick={() => void removeStep(step)}><Trash2 size={15} /></button>}
+          </li>)}</ol> : <p className="record-card-note">No steps have been added to this version.</p>}
+          <SlideOut open={stepOpen && canWrite && selected.status === 'draft'} onClose={() => setStepOpen(false)} title="Add step" description="Choose what happens next and when it runs."><div className="slideout-form">
+            <label>Kind<select value={stepKind} onChange={e => setStepKind(e.target.value)}><option value="email">Email</option><option value="wait">Wait</option><option value="task">Task</option><option value="condition">Condition</option></select></label>
+            <label>Delay (minutes)<input inputMode="numeric" value={stepDelay} onChange={e => setStepDelay(e.target.value)} /></label>
+            <label>Template<select value={stepTemplateId} onChange={e => setStepTemplateId(e.target.value)}><option value="">No template</option>{templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+            <label>Time zone<select value={stepTimeZonePolicy} onChange={e => setStepTimeZonePolicy(e.target.value)}><option value="contact">Contact</option><option value="workspace">Workspace</option><option value="utc">UTC</option></select></label>
+            <label className="checkbox-label"><input type="checkbox" checked={stepBusinessDays} onChange={e => setStepBusinessDays(e.target.checked)} /> Business days only</label>
+            <button className="primary-button" type="button" disabled={saving} onClick={() => void addStep()}>{saving ? 'Adding…' : 'Add step'}</button>
+          </div></SlideOut>
+        </section>
+
+        <section className="record-card">
+          <div className="record-card-head"><h3>Enrollments</h3>{canWrite && selected.status === 'active' && <button className="primary-button" type="button" onClick={() => { setEnrollOpen(true); setEnrollError('') }}><Plus size={15} /> Enroll contact</button>}</div>
+          <div className="stat-tiles">
+            <div className="stat-tile"><span>Active</span><b>{enrollmentSummary.active}</b></div>
+            <div className="stat-tile"><span>Replied</span><b>{enrollmentSummary.replied}</b></div>
+            <div className="stat-tile"><span>Paused</span><b>{enrollmentSummary.paused}</b></div>
+            <div className="stat-tile"><span>Completed</span><b>{enrollmentSummary.completed}</b></div>
+            <div className="stat-tile"><span>Total</span><b>{enrollmentSummary.total}</b></div>
+          </div>
+          {enrollments.length ? <div className="contact-table-wrap"><table className="contact-table">
+            <thead><tr><th>Contact</th><th>State</th><th>Enrolled</th><th>Next run</th><th>Stop reason</th></tr></thead>
+            <tbody>{enrollments.map(enrollment => {
+              const contact = enrollment.contacts
+              const contactName = contact ? `${contact.first_name} ${contact.last_name}`.trim() : 'Unknown'
+              return <tr key={enrollment.id}>
+                <td><b>{contactName}</b><br /><small>{contact?.email ?? '—'}</small></td>
+                <td><span className={stateClass(enrollment.state)}>{enrollment.state.replace('_', ' ')}</span></td>
+                <td>{new Date(enrollment.enrolled_at).toLocaleString()}</td>
+                <td>{enrollment.next_run_at ? new Date(enrollment.next_run_at).toLocaleString() : '—'}</td>
+                <td>{enrollment.stop_reason ?? '—'}</td>
+              </tr>
+            })}</tbody>
+          </table></div> : <p className="record-card-note">No contacts enrolled yet.</p>}
+        </section>
+      </>}
+    </EntityPage>
+
+    <SlideOut open={enrollOpen && canWrite} onClose={() => setEnrollOpen(false)} title="Enroll contact" description="Each person follows their own timeline through this sequence.">
+      <div className="slideout-form">
+        <label>Contact<select value={enrollContactId} onChange={e => setEnrollContactId(e.target.value)}><option value="">Select a contact</option>{contacts.map(c => <option key={c.id} value={c.id}>{`${c.first_name} ${c.last_name}`.trim()} — {c.email ?? 'no email'}</option>)}</select></label>
+        {enrollError && <p className="inline-error" role="alert">{enrollError}</p>}
+        <div className="slideout-actions"><button className="secondary-button" type="button" onClick={() => setEnrollOpen(false)}>Cancel</button><button className="primary-button" type="button" disabled={saving || !enrollContactId} onClick={() => void enrollContact()}>{saving ? 'Enrolling…' : 'Enroll'}</button></div>
       </div>
-      <div className="activity-timeline"><h4>Enrollments</h4>
-        <div className="enrollment-summary">
-          <span className="status-chip status-chip-active">Active: {enrollmentSummary.active}</span>
-          <span className="status-chip status-chip-replied">Replied: {enrollmentSummary.replied}</span>
-          <span className="status-chip status-chip-paused">Paused: {enrollmentSummary.paused}</span>
-          <span className="status-chip status-chip-completed">Completed: {enrollmentSummary.completed}</span>
-          <span className="status-chip">Total: {enrollmentSummary.total}</span>
-          {canWrite && selected.status === 'active' && <button className="secondary-button" type="button" onClick={() => { setEnrollDialogOpen(true); setEnrollError('') }}>Enroll contact</button>}
-        </div>
-        {enrollDialogOpen && canWrite && <div className="enroll-dialog"><label>Contact<select value={enrollContactId} onChange={e => setEnrollContactId(e.target.value)}><option value="">Select a contact</option>{contacts.map(c => <option key={c.id} value={c.id}>{`${c.first_name} ${c.last_name}`.trim()} — {c.email ?? 'no email'}</option>)}</select></label>{enrollError && <p className="inline-error">{enrollError}</p>}<div className="dialog-actions"><button className="secondary-button" type="button" onClick={() => setEnrollDialogOpen(false)}>Cancel</button><button className="primary-button" type="button" disabled={saving || !enrollContactId} onClick={() => void enrollContact()}>{saving ? 'Enrolling…' : 'Enroll'}</button></div></div>}
-        {enrollments.length ? <div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>Contact</th><th>State</th><th>Enrolled</th><th>Next run</th><th>Stop reason</th></tr></thead><tbody>{enrollments.map(enrollment => {
-          const contact = enrollment.contacts
-          const contactName = contact ? `${contact.first_name} ${contact.last_name}`.trim() : 'Unknown'
-          const nextRun = enrollment.next_run_at ? new Date(enrollment.next_run_at).toLocaleString() : '—'
-          const enrolledAt = new Date(enrollment.enrolled_at).toLocaleString()
-          return <tr key={enrollment.id}><td><b>{contactName}</b><br/><small>{contact?.email ?? '—'}</small></td><td><span className={statusClass(enrollment.state)}>{enrollment.state.replace('_', ' ')}</span></td><td>{enrolledAt}</td><td>{nextRun}</td><td>{enrollment.stop_reason ?? '—'}</td></tr>
-        })}</tbody></table></div> : <p>No contacts enrolled yet.</p>}
-      </div>
-    </section>}
+    </SlideOut>
   </section>
 }
