@@ -510,7 +510,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       <form className="slideout-form" onSubmit={create}>
         <label>Name<input value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
         <label>Description<input value={description} onChange={e => setDescription(e.target.value)} maxLength={500} placeholder="Optional" /></label>
-        <label>Category<select value={category} onChange={e => setCategory(e.target.value)}><option value="sales">Sales</option><option value="marketing">Marketing</option></select></label>
+        <label>Industry (group)<select value={category} onChange={e => setCategory(e.target.value)}><option value="sales">Sales</option><option value="marketing">Marketing</option></select></label>
         <label><span className="input-label">Language</span><Typeahead value={language} setValue={v => setLanguage(v)} options={LANGUAGES} placeholder="en" /></label>
         <label><span className="input-label">City</span><Typeahead value={city} setValue={v => setCity(v)} options={CITIES} placeholder="Austin" /></label>
         <label><span className="input-label">Country</span><Typeahead value={country} setValue={v => setCountry(v)} options={COUNTRIES} placeholder="United States" /></label>
