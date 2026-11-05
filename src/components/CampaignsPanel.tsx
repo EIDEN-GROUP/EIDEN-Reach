@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 
-type Campaign = { id: string; name: string; category: string; status: string; scheduled_at: string | null; sender_mailbox_id: string | null; sequence_id: string | null; archived_at: string | null }
+type Campaign = { id: string; name: string; category: string; industry?: string | null; status: string; scheduled_at: string | null; sender_mailbox_id: string | null; sequence_id: string | null; archived_at: string | null }
 type Mailbox = { id: string; email_address: string; connection_state: string }
 type Sequence = { id: string; name: string }
 
@@ -31,7 +31,7 @@ export function CampaignsPanel({ userId, canWrite }: { userId: string; canWrite:
       setOrgId(membership.data.organization_id)
       void (async () => { const iRes = await supabase!.from('industry_categories').select('name').eq('organization_id', membership.data!.organization_id).is('archived_at', null).order('name'); if (!iRes.error && iRes.data) setIndustries(iRes.data.map((r: { name: string }) => r.name)) })()
       const [campRes, mbRes, seqRes] = await Promise.all([
-        supabase!.from('campaigns').select('id,name,category,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name'),
+        supabase!.from('campaigns').select('id,name,category,industry,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name'),
         supabase!.from('mailbox_accounts').select('id,email_address,connection_state').eq('organization_id', membership.data.organization_id).is('disconnected_at', null).order('email_address'),
         supabase!.from('sequences').select('id,name').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name'),
       ])
@@ -50,7 +50,7 @@ export function CampaignsPanel({ userId, canWrite }: { userId: string; canWrite:
     if (!canWrite || !orgId || !name.trim()) return
     setSaving(true)
     setError('')
-    const result = await supabase!.from('campaigns').insert({ organization_id: orgId, owner_id: userId, name: name.trim(), category, sender_mailbox_id: senderMailboxId || null, sequence_id: sequenceId || null, status: 'draft' }).select('id,name,category,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').single()
+    const result = await supabase!.from('campaigns').insert({ organization_id: orgId, owner_id: userId, name: name.trim(), category: 'sales', industry: category, sender_mailbox_id: senderMailboxId || null, sequence_id: sequenceId || null, status: 'draft' }).select('id,name,category,industry,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').single()
     if (result.error) setError('Campaign could not be created.')
     else { setCampaigns(current => [...current, result.data as Campaign].sort((a, b) => a.name.localeCompare(b.name))); setName(''); setCategory('sales'); setSenderMailboxId(''); setSequenceId('') }
     setSaving(false)
@@ -66,7 +66,7 @@ export function CampaignsPanel({ userId, canWrite }: { userId: string; canWrite:
     if (!canWrite || !selected) return
     setSaving(true)
     setError('')
-    const result = await supabase!.from('campaigns').update({ name: draft.name.trim(), category: draft.category, status: draft.status, sender_mailbox_id: draft.senderMailboxId || null, sequence_id: draft.sequenceId || null }).eq('id', selected.id).eq('organization_id', orgId).select('id,name,category,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').single()
+    const result = await supabase!.from('campaigns').update({ name: draft.name.trim(), category: 'sales', industry: draft.category, status: draft.status, sender_mailbox_id: draft.senderMailboxId || null, sequence_id: draft.sequenceId || null }).eq('id', selected.id).eq('organization_id', orgId).select('id,name,category,industry,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').single()
     if (result.error) setError('Campaign changes could not be saved.')
     else { setCampaigns(current => current.map(c => c.id === selected.id ? result.data as Campaign : c).sort((a, b) => a.name.localeCompare(b.name))); setSelectedId(result.data.id) }
     setSaving(false)
