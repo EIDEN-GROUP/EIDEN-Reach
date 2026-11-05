@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev-worker": "cd workers/mailbox && npx wrangler dev --port 8787",
+    "dev-all": "scripts\\dev-all.cmd",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty",
     "test": "vitest run --pool=threads --maxWorkers=1",
