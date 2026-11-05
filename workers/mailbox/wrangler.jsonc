@@ -4,5 +4,8 @@
   "main": "src/worker.ts",
   "vars": {
     "APP_ORIGIN": "http://localhost:5173"
+  },
+  "triggers": {
+    "crons": ["*/15 * * * *"]
   }
 }

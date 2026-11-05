@@ -6,6 +6,8 @@ export interface Env {
   MAILBOX_ENCRYPTION_KEY_VERSION: string
   APP_ORIGIN: string
   SLACK_WEBHOOK_URL?: string
+  UNSUBSCRIBE_URL_BASE?: string
+  DISPATCH_TOKEN?: string
 }
 
 export function serviceHeaders(env: Env, contentType = false) {

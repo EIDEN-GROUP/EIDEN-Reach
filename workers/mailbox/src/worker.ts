@@ -12,6 +12,7 @@ import { parseMailboxInput, type MailboxInput } from './input'
 import { stopEnrollmentsForReply, reconcileReplyStoppedEnrollments } from './worker-reply'
 import { decodeBase64, decryptCredentials, encryptCredentials } from './worker-crypto'
 import { handleUnsubscribe, sendSequenceStep, unsubscribeConfirmationHtml } from './worker-sequence'
+import { handleSystemDispatch } from './worker-dispatch'
 
 import type { Env } from './runtime'
 import { serviceHeaders } from './runtime'
@@ -113,6 +114,16 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (origin && !env.APP_ORIGIN) return response({ error: 'Application origin is not configured.' }, 503, null, env)
 
   if (request.method !== 'GET' && request.method !== 'POST') return response({ error: 'Method not allowed.' }, 405, origin, env)
+
+  // No-auth background dispatcher (system-secret-gated)
+  if (url.pathname === '/system/dispatch-due' && request.method === 'POST') {
+    const token = request.headers.get('x-dispatch-secret') ?? ''
+    const { handleSystemDispatch } = await import('./worker-dispatch')
+    const result = await handleSystemDispatch(env, token, 10)
+    if (result.status !== 200) return response({ error: (result.body as { error?: string })?.error ?? 'dispatch failed' }, result.status, origin, env)
+    return response(result.body as Record<string, unknown>, 200, origin, env)
+  }
+
   const identity = await verifyIdentity(request, env)
   if (!identity) return response({ error: 'Sign in to manage a mailbox.' }, 401, origin, env)
 
@@ -432,4 +443,24 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
 export default {
   fetch(request: Request, env: Env): Promise<Response> { return handle(request, env) },
+  scheduled(_controller: ScheduledController, env: Env, context: ExecutionContext): void {
+    context.waitUntil(
+      (async () => {
+        const token = env.DISPATCH_TOKEN ?? ''
+        if (!token) return
+        try {
+          const result = await fetch('http://127.0.0.1:8787/system/dispatch-due', {
+            method: 'POST',
+            headers: { 'x-dispatch-secret': token, 'content-type': 'application/json' },
+          })
+          console.log('SYSTEM_DISPATCH_RESULT', result.status, await result.text().catch(() => ''))
+        } catch (error) {
+          console.error('SYSTEM_DISPATCH_FAILED', error)
+        }
+      })()
+    )
+  },
 }
+
+type ScheduledController = { cron: string; scheduledTime: number; noRetry(): void }
+type ExecutionContext = { waitUntil(promise: Promise<unknown>): void }

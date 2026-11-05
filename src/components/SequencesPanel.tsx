@@ -63,6 +63,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   const [saving, setSaving] = useState(false)
   const [sendNotice, setSendNotice] = useState('')
   const [dispatchNotice, setDispatchNotice] = useState('')
+  const [autoSend, setAutoSend] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -158,6 +159,32 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   }, [orgId, sequences])
 
   const selected = sequences.find(s => s.id === selectedId)
+
+  // Auto-dispatch: while this panel is mounted & autoSend enabled, process due
+  // enrollments every 60s. This is the in-browser background engine, so the
+  // user doesn't have to remember 'Dispatch due emails' by hand.
+  useEffect(() => {
+    if (!orgId || !autoSend) return
+    let timer: number | undefined
+    let mounted = true
+    const tick = async () => {
+      try {
+        const res = await dispatchDue(orgId, 5)
+        if (mounted && res.claimed > 0) {
+          setDispatchNotice(`Auto-dispatch: ${res.claimed} due, ${res.succeeded} sent, ${res.retried} skipped, ${res.failed} failed`)
+          if (selectedId) {
+            const r = await supabase!.from('sequence_enrollments').select('id,contact_id,state,enrolled_at,next_step_position,next_run_at,stopped_at,stop_reason,contacts:contact_id(first_name,last_name,email)').eq('sequence_id', selectedId).order('enrolled_at', { ascending: false }).limit(500)
+            if (!r.error && r.data) setEnrollments((r.data as unknown as Enrollment[]))
+          }
+        }
+      } catch (err) {
+        if (mounted) setDispatchNotice(err instanceof Error ? 'Auto-dispatch error: ' + err.message : 'Auto-dispatch failed.')
+      }
+    }
+    void tick()
+    timer = window.setInterval(tick, 60_000)
+    return () => { mounted = false; if (timer) window.clearInterval(timer) }
+  }, [orgId, autoSend, selectedId])
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -483,6 +510,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     <div className="panel-heading">
       <div><h2>Sequences</h2><p>Multi-step follow-up that stops automatically when a contact replies.</p></div>
       {canWrite && <div className="panel-actions">
+        <button className="secondary-button" type="button" onClick={() => setAutoSend(current => !current)}>{autoSend ? 'Stop auto-send' : 'Start auto-send'}</button>
         <button className="secondary-button" type="button" disabled={saving || templateLoading || !orgId} onClick={() => void useStandardTemplate()}>{templateLoading ? 'Creatingâ€¦' : 'Use 5-email template'}</button>
         <button className="primary-button" type="button" disabled={!orgId} onClick={() => setCreateOpen(true)}><Plus size={15} /> New sequence</button>
         {canWrite && <button className="secondary-button" type="button" disabled={saving || !orgId} onClick={() => void dispatchNow()} title="Process all due enrollments now.">Dispatch due emails</button>}

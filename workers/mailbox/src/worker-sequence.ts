@@ -281,7 +281,7 @@ export async function sendSequenceStep(env: Env, input: { organizationId: string
       sequence_step_id: step.id,
       contact_id: contact.id,
       idempotency_key: `seq-send-${enrollment.id}-${step.position}-${Date.now()}`,
-      status: 'sent',
+      status: 'accepted',
       started_at: now,
       finished_at: now,
     }),
