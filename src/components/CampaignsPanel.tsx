@@ -51,7 +51,7 @@ export function CampaignsPanel({ userId, canWrite }: { userId: string; canWrite:
     setSaving(true)
     setError('')
     const result = await supabase!.from('campaigns').insert({ organization_id: orgId, owner_id: userId, name: name.trim(), category: 'sales', industry: industry, sender_mailbox_id: senderMailboxId || null, sequence_id: sequenceId || null, status: 'draft' }).select('id,name,category,industry,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').single()
-    if (result.error) setError('Campaign could not be created.')
+    if (result.error) setError(`Campaign could not be created: ${result.error.code ?? ''} ${result.error.message ?? ''} ${result.error.details ?? ''}`.trim())
     else { setCampaigns(current => [...current, result.data as Campaign].sort((a, b) => a.name.localeCompare(b.name))); setName(''); setIndustry(''); setSenderMailboxId(''); setSequenceId('') }
     setSaving(false)
   }
