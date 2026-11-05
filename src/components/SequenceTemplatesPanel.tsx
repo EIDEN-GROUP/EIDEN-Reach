@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { Plus, Trash2, GripVertical, Mail } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CenterDialog } from './Overlay'
-import Typeahead from './ui/Combo'
+import Typeahead from './DataList'
 
 import { CITIES, COUNTRIES, LANGUAGES } from '../lib/localeData'
 

@@ -12,7 +12,7 @@ import { databaseConfigured, supabase } from './lib/supabase'
 import { loadProfile } from './lib/profile'
 import type { Profile } from './lib/profile'
 import { ProfileAvatar } from './components/ProfileAvatar'
-import Typeahead from './components/ui/Combo'
+import Typeahead from './components/DataList'
 
 import { CITIES, COUNTRIES, LANGUAGES } from './lib/localeData'
 import { companyInput, contactInput, dealInput, taskInput } from './lib/validation'

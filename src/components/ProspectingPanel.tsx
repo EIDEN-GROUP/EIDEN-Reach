@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { CheckCircle2, FileDown, FileUp, Lock, UserPlus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { SlideOut, CenterDialog } from './Overlay'
-import Typeahead from './ui/Combo'
+import Typeahead from './DataList'
 
 import { CITIES, COUNTRIES, LANGUAGES } from '../lib/localeData'
 

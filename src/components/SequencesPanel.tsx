@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { sendSequenceStep, dispatchDue } from '../lib/mailbox-api'
 import { calculateSequenceKpis, formatKpi, type SequenceKpis } from '../lib/dashboard-metrics'
 import { EntityPage, RailCard, SlideOut, CenterDialog } from './Overlay'
-import Typeahead from './ui/Combo'
+import Typeahead from './DataList'
 
 import { CITIES, COUNTRIES, LANGUAGES } from '../lib/localeData'
 import type { SequenceTemplateListItem } from './sequenceTemplateTypes'
