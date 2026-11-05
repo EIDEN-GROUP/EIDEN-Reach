@@ -12,7 +12,7 @@ import type { SequenceTemplateListItem } from './sequenceTemplateTypes'
 
 export type { SequenceTemplateListItem }
 
-type Sequence = { id: string; name: string; description: string | null; status: string; category: string; current_version: number; daily_limit: number | null; archived_at: string | null; sender_mailbox_id: string | null; source_template_id?: string | null; language?: string | null; city?: string | null; country?: string | null }
+type Sequence = { id: string; name: string; description: string | null; status: string; category: string; industry?: string | null; current_version: number; daily_limit: number | null; archived_at: string | null; sender_mailbox_id: string | null; source_template_id?: string | null; language?: string | null; city?: string | null; country?: string | null }
 
 type Step = { id: string; position: number; kind: string; delay_minutes: number; business_days_only: boolean; time_zone_policy: string; template_id: string | null }
 type Enrollment = { id: string; contact_id: string; state: string; enrolled_at: string; next_step_position: number; next_run_at: string | null; stopped_at: string | null; stop_reason: string | null; contacts: { first_name: string; last_name: string; email: string | null } | null }
@@ -20,7 +20,7 @@ type Mailbox = { id: string; email_address: string; display_name: string | null 
 type Contact = { id: string; first_name: string; last_name: string; email: string | null; job_title: string | null; lifecycle: string; company_id: string | null; companies?: { name: string | null } | null }
 type TemplateInfo = { id: string; name: string; subject: string; html_body: string; text_body: string }
 
-const SEQUENCE_COLUMNS = 'id,name,description,status,category,current_version,daily_limit,archived_at,sender_mailbox_id,source_template_id'
+const SEQUENCE_COLUMNS = 'id,name,description,status,category,current_version,daily_limit,archived_at,sender_mailbox_id,source_template_id,industry'
 
 export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite: boolean }) {
   const [orgId, setOrgId] = useState('')
@@ -37,12 +37,13 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [category, setCategory] = useState('sales')
+  const [category] = useState('sales')
+  const [industry, setIndustry] = useState('')
   const [language, setLanguage] = useState('')
   const [city, setCity] = useState('')
   const [country, setCountry] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
-  const [draft, setDraft] = useState({ name: '', description: '', status: 'draft', dailyLimit: '', senderMailboxId: '', language: '', city: '', country: '' })
+  const [draft, setDraft] = useState({ name: '', description: '', status: 'draft', dailyLimit: '', senderMailboxId: '', industry: '', language: '', city: '', country: '' })
   const [templateLoading, setTemplateLoading] = useState(false)
   const [enrollOpen, setEnrollOpen] = useState(false)
   const [enrollSearch, setEnrollSearch] = useState('')
@@ -167,14 +168,15 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       target_organization: orgId,
       target_name: name.trim(),
       target_description: description.trim(),
-      target_category: category,
+      target_category: 'sales',
     }).single()
     if (sequenceResult.error) {
       setError(sequenceResult.error.code === '23505' ? 'A sequence with that name already exists.' : 'Sequence could not be initialized.')
       setSaving(false)
       return
-    } else if (language.trim() || city.trim() || country.trim()) {
-      await supabase!.from('sequences').update({ language: language.trim() || null, city: city.trim() || null, country: country.trim() || null }).eq('id', (sequenceResult.data as { id: string }).id)
+    } else {
+      const restaurantId = (sequenceResult.data as { id: string }).id
+      await supabase!.from('sequences').update({ industry: industry.trim() || null, language: language.trim() || null, city: city.trim() || null, country: country.trim() || null }).eq('id', restaurantId)
     }
     const createdId = (sequenceResult.data as { id: string }).id
     // If a sequence template was selected, copy its steps now
@@ -218,14 +220,14 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       setSequences(current => [...current, fetched.data as Sequence].sort((a, b) => a.name.localeCompare(b.name)))
       select(fetched.data as Sequence)
     }
-    setName(''); setDescription(''); setCategory('sales'); setLanguage(''); setCity(''); setCountry(''); setSelectedTemplateId('')
+    setName(''); setDescription(''); setIndustry(''); setLanguage(''); setCity(''); setCountry(''); setSelectedTemplateId('')
     setCreateOpen(false)
     setSaving(false)
   }
 
   function select(seq: Sequence) {
     setSelectedId(seq.id)
-    setDraft({ name: seq.name, description: seq.description ?? '', status: seq.status, dailyLimit: seq.daily_limit?.toString() ?? '', senderMailboxId: seq.sender_mailbox_id ?? '', language: seq.language ?? '', city: seq.city ?? '', country: seq.country ?? '' })
+    setDraft({ name: seq.name, description: seq.description ?? '', status: seq.status, dailyLimit: seq.daily_limit?.toString() ?? '', senderMailboxId: seq.sender_mailbox_id ?? '', industry: seq.industry ?? '', language: seq.language ?? '', city: seq.city ?? '', country: seq.country ?? '' })
     setSendNotice('')
   }
 
@@ -237,12 +239,13 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     setSaving(true)
     setError('')
     const dailyLimit = draft.dailyLimit ? Number(draft.dailyLimit) : null
+    const industryValue = draft.industry.trim() || ''
     if (dailyLimit !== null && (!Number.isInteger(dailyLimit) || dailyLimit <= 0)) {
       setError('Daily limit must be a positive whole number.')
       setSaving(false)
       return
     }
-    const result = await supabase!.from('sequences').update({ name: draft.name.trim(), description: draft.description.trim() || null, status: draft.status, daily_limit: dailyLimit, sender_mailbox_id: draft.senderMailboxId || null, language: draft.language.trim() || null, city: draft.city.trim() || null, country: draft.country.trim() || null }).eq('id', selected.id).eq('organization_id', orgId).select(SEQUENCE_COLUMNS).single()
+    const result = await supabase!.from('sequences').update({ name: draft.name.trim(), description: draft.description.trim() || null, status: draft.status, daily_limit: dailyLimit, industry: industryValue, sender_mailbox_id: draft.senderMailboxId || null, language: draft.language.trim() || null, city: draft.city.trim() || null, country: draft.country.trim() || null }).eq('id', selected.id).eq('organization_id', orgId).select(SEQUENCE_COLUMNS).single()
     if (result.error) {
       const message = result.error.message
       setError(message.includes('at least one step') ? 'Add at least one step before activating this sequence.' : message.includes('requires a template') ? 'Every email step needs a template before activation.' : 'Sequence changes could not be saved.')
@@ -512,7 +515,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       <form className="slideout-form" onSubmit={create}>
         <label>Name<input value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
         <label>Description<input value={description} onChange={e => setDescription(e.target.value)} maxLength={500} placeholder="Optional" /></label>
-        <label>Industry<select value={category} onChange={e => setCategory(e.target.value)}><option value="">No industry</option>{industries.map(ic => (<option key={ic} value={ic}>{ic}</option>))}</select></label>
+        <label>Industry<select value={industry} onChange={e => setIndustry(e.target.value)}><option value="">No industry</option>{industries.map(ic => (<option key={ic} value={ic}>{ic}</option>))}</select></label>
         <label><span className="input-label">Language</span><Typeahead value={language} setValue={v => setLanguage(v)} options={LANGUAGES} placeholder="en" /></label>
         <label><span className="input-label">City</span><Typeahead value={city} setValue={v => setCity(v)} options={CITIES} placeholder="Austin" /></label>
         <label><span className="input-label">Country</span><Typeahead value={country} setValue={v => setCountry(v)} options={COUNTRIES} placeholder="United States" /></label>
@@ -540,6 +543,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
             <label className="span-2">Description<input value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} maxLength={500} disabled={!canWrite} /></label>
             <label>Status<select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })} disabled={!canWrite}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option></select></label>
             <label>Daily limit<input inputMode="numeric" value={draft.dailyLimit} onChange={e => setDraft({ ...draft, dailyLimit: e.target.value })} placeholder="No limit" disabled={!canWrite} /></label>
+            <label>Industry<select value={draft.industry} onChange={e => setDraft({ ...draft, industry: e.target.value })} disabled={!canWrite}><option value="">No industry</option>{industries.map(ic => (<option key={ic} value={ic}>{ic}</option>))}</select></label>
             <label className="span-2">Sender mailbox<select value={draft.senderMailboxId} onChange={e => setDraft({ ...draft, senderMailboxId: e.target.value })} disabled={!canWrite}><option value="">Select a mailbox</option>{mailboxes.map(mb => <option key={mb.id} value={mb.id}>{mb.display_name ? `${mb.display_name} <${mb.email_address}>` : mb.email_address}</option>)}</select></label>
             {canWrite && <div className="form-actions span-2"><button className="primary-button" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button></div>}
           </form>
