@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase'
 import { sendSequenceStep, dispatchDue } from '../lib/mailbox-api'
 import { calculateSequenceKpis, formatKpi, type SequenceKpis } from '../lib/dashboard-metrics'
 import { EntityPage, RailCard, SlideOut, CenterDialog } from './Overlay'
+import Typeahead from './Typeahead'
+import { CITIES, COUNTRIES, LANGUAGES } from '../lib/localeData'
 import type { SequenceTemplateListItem } from './sequenceTemplateTypes'
 
 export type { SequenceTemplateListItem }
@@ -508,9 +510,9 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
         <label>Name<input value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
         <label>Description<input value={description} onChange={e => setDescription(e.target.value)} maxLength={500} placeholder="Optional" /></label>
         <label>Category<select value={category} onChange={e => setCategory(e.target.value)}><option value="sales">Sales</option><option value="marketing">Marketing</option></select></label>
-        <label>Language<input value={language} onChange={e => setLanguage(e.target.value)} maxLength={40} placeholder="en" /></label>
-        <label>City<input value={city} onChange={e => setCity(e.target.value)} maxLength={120} placeholder="Austin" /></label>
-        <label>Country<input value={country} onChange={e => setCountry(e.target.value)} maxLength={80} placeholder="United States" /></label>
+        <label><span className="input-label">Language</span><Typeahead value={language} setValue={v => setLanguage(v)} options={LANGUAGES} placeholder="en" /></label>
+        <label><span className="input-label">City</span><Typeahead value={city} setValue={v => setCity(v)} options={CITIES} placeholder="Austin" /></label>
+        <label><span className="input-label">Country</span><Typeahead value={country} setValue={v => setCountry(v)} options={COUNTRIES} placeholder="United States" /></label>
         <label>Start from sequence template<select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)}><option value="">Empty sequence</option>{sequenceTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
         <div className="slideout-actions"><button className="secondary-button" type="button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button" disabled={saving || !orgId || !name.trim()}>{saving ? 'Savingâ€¦' : 'Create sequence'}</button></div>
       </form>

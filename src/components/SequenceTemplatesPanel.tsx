@@ -3,6 +3,8 @@ import type { FormEvent } from 'react'
 import { Plus, Trash2, GripVertical, Mail } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CenterDialog } from './Overlay'
+import Typeahead from './Typeahead'
+import { CITIES, COUNTRIES, LANGUAGES } from '../lib/localeData'
 
 export type SequenceTemplate = {
   id: string
@@ -189,9 +191,9 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
           <label className="span-2">Name<input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} required maxLength={200} placeholder="Standard B2B Outreach" /></label>
           <label className="span-2">Description<input value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} maxLength={500} placeholder="Five follow-ups over 20 days, stop on reply" /></label>
           <label>Category<select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}><option value="sales">Sales</option><option value="marketing">Marketing</option></select></label>
-          <label>Language<input value={draft.language} onChange={e => setDraft({ ...draft, language: e.target.value })} maxLength={40} placeholder="en" /></label>
-          <label>City<input value={draft.city} onChange={e => setDraft({ ...draft, city: e.target.value })} maxLength={120} placeholder="Austin" /></label>
-          <label>Country<input value={draft.country} onChange={e => setDraft({ ...draft, country: e.target.value })} maxLength={80} placeholder="United States" /></label>
+          <label><span className="input-label">Language</span><Typeahead value={draft.language} setValue={v => setDraft({ ...draft, language: v })} options={LANGUAGES} placeholder="en" /></label>
+          <label><span className="input-label">City</span><Typeahead value={draft.city} setValue={v => setDraft({ ...draft, city: v })} options={CITIES} placeholder="Austin" /></label>
+          <label><span className="input-label">Country</span><Typeahead value={draft.country} setValue={v => setDraft({ ...draft, country: v })} options={COUNTRIES} placeholder="United States" /></label>
         </div>
 
         <h3 className="builder-title">Steps</h3>

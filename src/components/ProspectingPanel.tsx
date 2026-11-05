@@ -3,6 +3,8 @@ import type { FormEvent } from 'react'
 import { CheckCircle2, FileDown, FileUp, Lock, UserPlus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { SlideOut, CenterDialog } from './Overlay'
+import Typeahead from './Typeahead'
+import { CITIES, COUNTRIES, LANGUAGES } from '../lib/localeData'
 
 export type PreviewRow = {
   firstName: string
@@ -14,11 +16,14 @@ export type PreviewRow = {
   companyDomain: string | null
   industry: string | null
   location: string | null
+  language: string | null
+  city: string | null
+  country: string | null
 }
 
-const EXAMPLE_CSV = `first_name,last_name,email,phone,job_title,company_name,company_domain,industry,location
-Ada,Lovelace,ada@example.com,+1 555 0101,Managing Director,Example Holdings,example.com,Manufacturing,Austin TX
-Grace,Hopper,grace@example.com,+1 555 0102,Operations Lead,Northwind Labs,northwind.example,Logistics,Chicago IL
+const EXAMPLE_CSV = `first_name,last_name,email,phone,job_title,company_name,company_domain,industry,location,language,city,country
+Ada,Lovelace,ada@example.com,+1 555 0101,Managing Director,Example Holdings,example.com,Technology,Austin TX,en-US,Austin,United States
+Grace,Hopper,grace@example.com,+1 555 0102,Operations Lead,Northwind Labs,northwind.example,Logistics,Chicago IL,en-US,Chicago,United States
 `
 
 export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrite: boolean }) {
@@ -28,12 +33,12 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
   const [importOpen, setImportOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([])
+  const [industries, setIndustries] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  const [industries, setIndustries] = useState<string[]>([])
-  const [addForm, setAddForm] = useState({ firstName: '', lastName: '', email: '', phone: '', jobTitle: '', companyId: '', companyName: '', companyDomain: '', industry: '', location: '' , language: '', city: '', country: '' })
+  const [addForm, setAddForm] = useState({ firstName: '', lastName: '', email: '', phone: '', jobTitle: '', companyId: '', companyName: '', companyDomain: '', industry: '', location: '', language: '', city: '', country: '' })
 
   useEffect(() => {
     let active = true
@@ -82,7 +87,7 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
       }
       let companyId = addForm.companyId || null
       if (!companyId && addForm.companyName.trim()) {
-        const insertedCompany = await supabase!.from('companies').insert({ organization_id: orgId, name: addForm.companyName.trim(), domain: addForm.companyDomain.trim() || null, industry: addForm.industry.trim() || null, location: addForm.location.trim() || null, owner_id: userId, created_by: userId }).select('id,name').single()
+        const insertedCompany = await supabase!.from('companies').insert({ organization_id: orgId, name: addForm.companyName.trim(), domain: addForm.companyDomain.trim() || null, industry: addForm.industry.trim() || null, location: addForm.location.trim() || null, owner_id: userId, created_by: userId, language: addForm.language.trim() || null, city: addForm.city.trim() || null, country: addForm.country.trim() || null }).select('id,name').single()
         if (insertedCompany.error) {
           setError(insertedCompany.error.code === '23505' ? 'A company with that domain already exists.' : 'Company could not be created.')
           setSaving(false)
@@ -131,6 +136,9 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
         companyDomain: get('company_domain') || null,
         industry: get('industry') || null,
         location: get('location') || null,
+        language: get('language') || null,
+        city: get('city') || null,
+        country: get('country') || null,
       })
     }
     setPreview(parsed)
@@ -144,7 +152,6 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
     setSaving(true)
     setError('')
     try {
-      // company cache for the batch
       const companyCache = new Map<string, string>()
       const getCompanyId = async (row: PreviewRow): Promise<string | null> => {
         const key = (row.companyDomain || row.companyName || '').toLowerCase().trim()
@@ -152,7 +159,7 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
         if (companyCache.has(key)) return companyCache.get(key)!
         let res = await supabase!.from('companies').select('id').eq('organization_id', orgId).is('archived_at', null).or(`domain.ilike.${row.companyDomain || '___none___'},name.ilike.${row.companyName || '___none___'}`).limit(1).maybeSingle()
         if (!res.data && (row.companyDomain || row.companyName)) {
-          const inserted = await supabase!.from('companies').insert({ organization_id: orgId, name: row.companyName || row.companyDomain || 'Unknown', domain: row.companyDomain || null, industry: row.industry || null, location: row.location || null, owner_id: userId, created_by: userId }).select('id').single()
+          const inserted = await supabase!.from('companies').insert({ organization_id: orgId, name: row.companyName || row.companyDomain || 'Unknown', domain: row.companyDomain || null, industry: row.industry || null, location: row.location || null, owner_id: userId, created_by: userId, language: row.language || null, city: row.city || null, country: row.country || null }).select('id').single()
           if (inserted.data) res = { data: { id: inserted.data.id }, error: null } as typeof res
         }
         const id = res.data?.id ?? null
@@ -168,7 +175,7 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
         if (!row.email) { failures.push(`${row.firstName} ${row.lastName}: missing email`); continue }
         if (existingEmails.has(row.email)) { failures.push(`${row.email}: duplicate — skipped`); continue }
         const companyId = await getCompanyId(row)
-        const result = await supabase!.from('contacts').insert({ organization_id: orgId, first_name: row.firstName, last_name: row.lastName, email: row.email, phone: row.phone || null, job_title: row.jobTitle || null, company_id: companyId, owner_id: userId, created_by: userId, lifecycle: 'new', source: 'csv_import' })
+        const result = await supabase!.from('contacts').insert({ organization_id: orgId, first_name: row.firstName, last_name: row.lastName, email: row.email, phone: row.phone || null, job_title: row.jobTitle || null, company_id: companyId, owner_id: userId, created_by: userId, lifecycle: 'new', source: 'csv_import', industry: row.industry || null, language: row.language || null, city: row.city || null, country: row.country || null })
         if (result.error) {
           if (result.error.code === '23505') failures.push(`${row.email}: duplicate — skipped`)
           else failures.push(`${row.email}: ${result.error.message}`)
@@ -182,7 +189,7 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = 'eiden-reach-import-errors.csv.txt'
+        a.download = 'eiden-reach-import-errors.txt'
         a.click()
         URL.revokeObjectURL(url)
       }
@@ -213,7 +220,7 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
       <div className="source-grid">
         <section className="record-card">
           <div className="record-card-head"><h3>Manual CSV import</h3><CheckCircle2 size={18} className="check-ok" aria-label="Available" /></div>
-          <p className="record-card-note">Paste rows with <code>first_name,last_name,email,phone,job_title,company_name,company_domain,industry,location</code>. Download the example CSV for the exact format. Each row becomes a contact you own.</p>
+          <p className="record-card-note">Paste rows with <code>first_name,last_name,email,phone,job_title,company_name,company_domain,industry,location,language,city,country</code>. Download the example CSV for the exact format. Each row becomes a contact you own.</p>
           <div><span className="status-chip status-chip-active">Available</span></div>
         </section>
         <section className="record-card">
@@ -232,13 +239,15 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
         <label>Email<input type="email" value={addForm.email} onChange={e => handleAddNameField('email', e.target.value)} required maxLength={320} /></label>
         <label>Phone<input value={addForm.phone} onChange={e => handleAddNameField('phone', e.target.value)} maxLength={40} placeholder="+1 555 0101" /></label>
         <label>Job title<input value={addForm.jobTitle} onChange={e => handleAddNameField('jobTitle', e.target.value)} maxLength={200} placeholder="Managing Director" /></label>
-              <label>Industry<select value={addForm.industry} onChange={e => handleAddNameField('industry', e.target.value)}><option value="">No industry</option>{industries.map(ic => (<option key={ic} value={ic}>{ic}</option>))}</select></label>
         <div className="template-grid">
           <label>Link to existing company<select value={addForm.companyId} onChange={e => handleAddNameField('companyId', e.target.value)}><option value="">— create a new one —</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>
           <label>Company name<input value={addForm.companyName} onChange={e => handleAddNameField('companyName', e.target.value)} maxLength={200} placeholder="Example Holdings" disabled={!!addForm.companyId} /></label>
           <label>Company domain<input value={addForm.companyDomain} onChange={e => handleAddNameField('companyDomain', e.target.value)} maxLength={253} placeholder="example.com" disabled={!!addForm.companyId} /></label>
-          <label>Industry<input value={addForm.industry} onChange={e => handleAddNameField('industry', e.target.value)} maxLength={100} disabled={!!addForm.companyId} /></label>
-          <label className="span-2">Location<input value={addForm.location} onChange={e => handleAddNameField('location', e.target.value)} maxLength={160} placeholder="Austin TX" disabled={!!addForm.companyId} /></label>\n              <label>Language<input value={addForm.language} onChange={e => handleAddNameField('language', e.target.value)} maxLength={40} placeholder="en-US" disabled={!!addForm.companyId} /></label>\n              <label>City<input value={addForm.city} onChange={e => handleAddNameField('city', e.target.value)} maxLength={120} placeholder="Austin" disabled={!!addForm.companyId} /></label>\n              <label>Country<input value={addForm.country} onChange={e => handleAddNameField('country', e.target.value)} maxLength={80} placeholder="United States" disabled={!!addForm.companyId} /></label>
+          <label>Industry<select value={addForm.industry} onChange={e => handleAddNameField('industry', e.target.value)}><option value="">No industry</option>{industries.map(ic => (<option key={ic} value={ic}>{ic}</option>))}</select></label>
+          <label className="span-2">Location<input value={addForm.location} onChange={e => handleAddNameField('location', e.target.value)} maxLength={160} placeholder="Austin TX" disabled={!!addForm.companyId} /></label>
+          <label>Language<Typeahead value={addForm.language} setValue={v => handleAddNameField('language', v)} options={LANGUAGES} placeholder="en-US" disabled={!!addForm.companyId} /></label>
+          <label>City<Typeahead value={addForm.city} setValue={v => handleAddNameField('city', v)} options={CITIES} placeholder="Austin" disabled={!!addForm.companyId} /></label>
+          <label>Country<Typeahead value={addForm.country} setValue={v => handleAddNameField('country', v)} options={COUNTRIES} placeholder="United States" disabled={!!addForm.companyId} /></label>
         </div>
         {error && <p className="inline-error" role="alert">{error}</p>}
         <div className="slideout-actions"><button className="secondary-button" type="button" onClick={() => setAddOpen(false)}>Cancel</button><button className="primary-button" disabled={saving || !orgId}>{saving ? 'Adding…' : 'Add contact'}</button></div>
@@ -247,7 +256,7 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
 
     <SlideOut open={importOpen && canWrite} onClose={closeImport} title="Import contacts" description="Paste CSV, check the preview, then import.">
       <div className="slideout-form">
-        <label>CSV rows<textarea value={csv} onChange={e => setCsv(e.target.value)} rows={6} placeholder="first_name,last_name,email,phone,job_title,company_name,company_domain,industry,location" /></label>
+        <label>CSV rows<textarea value={csv} onChange={e => setCsv(e.target.value)} rows={6} placeholder="first_name,last_name,email,phone,job_title,company_name,company_domain,industry,location,language,city,country" /></label>
         <div className="slideout-actions"><button className="secondary-button" type="button" onClick={parse} disabled={!csv.trim()}>Preview rows</button><button className="text-action" type="button" onClick={downloadExampleCsv}>Download example CSV</button></div>
         {error && <p className="inline-error" role="alert">{error}</p>}
         {preview.length > 0 && <form className="import-preview" onSubmit={importRows}>
