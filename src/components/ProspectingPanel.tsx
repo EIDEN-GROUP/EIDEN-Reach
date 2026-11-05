@@ -32,7 +32,7 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  const [addForm, setAddForm] = useState({ firstName: '', lastName: '', email: '', phone: '', jobTitle: '', companyId: '', companyName: '', companyDomain: '', industry: '', location: '' })
+  const [addForm, setAddForm] = useState({ firstName: '', lastName: '', email: '', phone: '', jobTitle: '', companyId: '', companyName: '', companyDomain: '', industry: '', location: '' , language: '', city: '', country: '' })
 
   useEffect(() => {
     let active = true
@@ -88,14 +88,14 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
         companyId = insertedCompany.data.id
         setCompanies(current => [...current, insertedCompany.data].sort((a, b) => a.name.localeCompare(b.name)))
       }
-      const result = await supabase!.from('contacts').insert({ organization_id: orgId, first_name: addForm.firstName.trim(), last_name: addForm.lastName.trim() || '', email, phone: addForm.phone.trim() || null, job_title: addForm.jobTitle.trim() || null, company_id: companyId, owner_id: userId, created_by: userId, lifecycle: 'new', source: 'manual' }).select('id')
+      const result = await supabase!.from('contacts').insert({ organization_id: orgId, first_name: addForm.firstName.trim(), last_name: addForm.lastName.trim() || '', email, phone: addForm.phone.trim() || null, job_title: addForm.jobTitle.trim() || null, company_id: companyId, owner_id: userId, created_by: userId, lifecycle: 'new', source: 'manual', language: addForm.language.trim() || null, city: addForm.city.trim() || null, country: addForm.country.trim() || null }).select('id')
       if (result.error) {
         setError(result.error.code === '23505' ? 'A contact with that email already exists.' : 'Contact could not be saved.')
         setSaving(false)
         return
       }
       setMessage('Contact added.')
-      setAddForm({ firstName: '', lastName: '', email: '', phone: '', jobTitle: '', companyId: '', companyName: '', companyDomain: '', industry: '', location: '' })
+      setAddForm({ firstName: '', lastName: '', email: '', phone: '', jobTitle: '', companyId: '', companyName: '', companyDomain: '', industry: '', location: '', language: '', city: '', country: '' })
       setAddOpen(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Contact could not be saved.')
@@ -234,7 +234,7 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
           <label>Company name<input value={addForm.companyName} onChange={e => handleAddNameField('companyName', e.target.value)} maxLength={200} placeholder="Example Holdings" disabled={!!addForm.companyId} /></label>
           <label>Company domain<input value={addForm.companyDomain} onChange={e => handleAddNameField('companyDomain', e.target.value)} maxLength={253} placeholder="example.com" disabled={!!addForm.companyId} /></label>
           <label>Industry<input value={addForm.industry} onChange={e => handleAddNameField('industry', e.target.value)} maxLength={100} disabled={!!addForm.companyId} /></label>
-          <label className="span-2">Location<input value={addForm.location} onChange={e => handleAddNameField('location', e.target.value)} maxLength={160} placeholder="Austin TX" disabled={!!addForm.companyId} /></label>
+          <label className="span-2">Location<input value={addForm.location} onChange={e => handleAddNameField('location', e.target.value)} maxLength={160} placeholder="Austin TX" disabled={!!addForm.companyId} /></label>\n              <label>Language<input value={addForm.language} onChange={e => handleAddNameField('language', e.target.value)} maxLength={40} placeholder="en-US" disabled={!!addForm.companyId} /></label>\n              <label>City<input value={addForm.city} onChange={e => handleAddNameField('city', e.target.value)} maxLength={120} placeholder="Austin" disabled={!!addForm.companyId} /></label>\n              <label>Country<input value={addForm.country} onChange={e => handleAddNameField('country', e.target.value)} maxLength={80} placeholder="United States" disabled={!!addForm.companyId} /></label>
         </div>
         {error && <p className="inline-error" role="alert">{error}</p>}
         <div className="slideout-actions"><button className="secondary-button" type="button" onClick={() => setAddOpen(false)}>Cancel</button><button className="primary-button" disabled={saving || !orgId}>{saving ? 'Adding…' : 'Add contact'}</button></div>

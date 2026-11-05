@@ -33,8 +33,11 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('sales')
+  const [language, setLanguage] = useState('')
+  const [city, setCity] = useState('')
+  const [country, setCountry] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
-  const [draft, setDraft] = useState({ name: '', description: '', status: 'draft', dailyLimit: '', senderMailboxId: '' })
+  const [draft, setDraft] = useState({ name: '', description: '', status: 'draft', dailyLimit: '', senderMailboxId: '', language: '', city: '', country: '' })
   const [templateLoading, setTemplateLoading] = useState(false)
   const [enrollOpen, setEnrollOpen] = useState(false)
   const [enrollSearch, setEnrollSearch] = useState('')
@@ -164,6 +167,8 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       setError(sequenceResult.error.code === '23505' ? 'A sequence with that name already exists.' : 'Sequence could not be initialized.')
       setSaving(false)
       return
+    } else if (language.trim() || city.trim() || country.trim()) {
+      await supabase!.from('sequences').update({ language: language.trim() || null, city: city.trim() || null, country: country.trim() || null }).eq('id', (sequenceResult.data as { id: string }).id)
     }
     const createdId = (sequenceResult.data as { id: string }).id
     // If a sequence template was selected, copy its steps now
@@ -207,7 +212,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       setSequences(current => [...current, fetched.data as Sequence].sort((a, b) => a.name.localeCompare(b.name)))
       select(fetched.data as Sequence)
     }
-    setName(''); setDescription(''); setCategory('sales'); setSelectedTemplateId('')
+    setName(''); setDescription(''); setCategory('sales'); setLanguage(''); setCity(''); setCountry(''); setSelectedTemplateId('')
     setCreateOpen(false)
     setSaving(false)
   }
@@ -502,6 +507,9 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
         <label>Name<input value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
         <label>Description<input value={description} onChange={e => setDescription(e.target.value)} maxLength={500} placeholder="Optional" /></label>
         <label>Category<select value={category} onChange={e => setCategory(e.target.value)}><option value="sales">Sales</option><option value="marketing">Marketing</option></select></label>
+        <label>Language<input value={language} onChange={e => setLanguage(e.target.value)} maxLength={40} placeholder="en" /></label>
+        <label>City<input value={city} onChange={e => setCity(e.target.value)} maxLength={120} placeholder="Austin" /></label>
+        <label>Country<input value={country} onChange={e => setCountry(e.target.value)} maxLength={80} placeholder="United States" /></label>
         <label>Start from sequence template<select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)}><option value="">Empty sequence</option>{sequenceTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
         <div className="slideout-actions"><button className="secondary-button" type="button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button" disabled={saving || !orgId || !name.trim()}>{saving ? 'Savingâ€¦' : 'Create sequence'}</button></div>
       </form>
