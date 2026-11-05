@@ -19,6 +19,8 @@ const MERGE_TAGS = [
   { label: 'Company', token: '{{company}}' },
   { label: 'Email', token: '{{email}}' },
   { label: 'Sender', token: '{{sender_name}}' },
+  { label: 'Unsubscribe link', token: '{{unsubscribe_link}}' },
+  { label: 'Unsubscribe button', token: '{{unsubscribe_button}}' },
 ]
 
 const defaultDraft = { name: '', subject: '', textBody: '', htmlBody: '', category: 'sales' }

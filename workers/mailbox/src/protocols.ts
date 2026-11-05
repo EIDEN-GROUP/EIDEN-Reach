@@ -670,6 +670,8 @@ export async function sendSmtpEmail(input: {
   to: string
   subject: string
   text: string
+  html?: string | null
+  listUnsubscribe?: string[]
 }): Promise<SmtpSendResult> {
   async function sendOnPort(port: 465 | 587): Promise<SmtpSendResult> {
     let socket: Socket | undefined
@@ -712,6 +714,9 @@ export async function sendSmtpEmail(input: {
 
       const messageId = `<${Date.now()}.${Math.floor(Math.random() * 1e9)}@eiden-reach.invalid>`
       const safeSubject = input.subject.replace(/[\r\n]/g, ' ')
+      const unsubscribeHeaders = input.listUnsubscribe && input.listUnsubscribe.length > 0
+        ? [`List-Unsubscribe: ${input.listUnsubscribe.map(url => `<${url}>`).join(', ')}`, 'List-Unsubscribe-Post: List-Unsubscribe=One-Click']
+        : []
       const headers = [
         `From: ${input.from}`,
         `To: ${input.to}`,
@@ -719,12 +724,33 @@ export async function sendSmtpEmail(input: {
         `Date: ${new Date().toUTCString()}`,
         `Message-ID: ${messageId}`,
         'MIME-Version: 1.0',
-        'Content-Type: text/plain; charset=utf-8',
-        'Content-Transfer-Encoding: 8bit',
-        '',
+        ...unsubscribeHeaders,
       ]
-      const stuffed = input.text.replace(/\r?\n/g, '\r\n').split('\r\n').map(line => (line.startsWith('.') ? '.' + line : line)).join('\r\n')
-      await channel.writeLine(headers.join('\r\n') + stuffed + '\r\n.')
+      let body: string
+      if (input.html) {
+        const boundary = `eiden_reach_${Date.now().toString(16)}`
+        headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`)
+        const htmlPart = [
+          `--${boundary}`,
+          'Content-Type: text/plain; charset=utf-8',
+          'Content-Transfer-Encoding: 8bit',
+          '',
+          input.text,
+          `--${boundary}`,
+          'Content-Type: text/html; charset=utf-8',
+          'Content-Transfer-Encoding: 8bit',
+          '',
+          input.html,
+          `--${boundary}--`,
+        ].join('\r\n')
+        body = headers.join('\r\n') + '\r\n\r\n' + htmlPart
+      } else {
+        headers.push('Content-Type: text/plain; charset=utf-8', 'Content-Transfer-Encoding: 8bit')
+        body = headers.join('\r\n') + '\r\n\r\n' + input.text
+      }
+      const dotStuff = (message: string) => message.replace(/\r?\n/g, '\r\n').split('\r\n').map(line => (line.startsWith('.') ? '.' + line : line)).join('\r\n')
+      const stuffed = dotStuff(body)
+      await channel.writeLine(stuffed + '\r\n.')
       expectSmtpCode(250, await readSmtpReply(channel), 'smtp_connection_failed')
       try { await smtpCommand(channel, 'QUIT') } catch { /* best effort */ }
       return { port, tlsMode: port === 465 ? 'implicit_tls' : 'starttls' }

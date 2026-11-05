@@ -612,3 +612,30 @@ img.brand-mark { object-fit: contain; background: none; border-radius: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* People page tabs */
+.people-tabs { display:flex; gap:8px; margin-bottom:12px; }
+.people-tabs button { border:1px solid var(--line); background:var(--surface-raised); padding:8px 14px; border-radius:var(--radius-sm); cursor:pointer; font-weight:600; }
+.people-tabs .tab-active { border-color:var(--accent, #4f46e5); color:var(--accent, #4f46e5); }
+
+/* Sequence templates builder */
+.builder-title { font-size:.85rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:6px 0 8px; }
+.template-steps { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; max-height:52vh; overflow:auto; }
+.template-step { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; border:1px solid var(--line); border-radius:var(--radius-sm); padding:10px 12px; background:var(--surface-raised); }
+.template-step-head { grid-column:2; }
+.template-step-fields { grid-column:2; display:grid; gap:8px; }
+.template-step-meta { grid-column:2; display:flex; flex-wrap:wrap; align-items:end; gap:10px; }
+
+/* Enroll modal */
+.enroll-modal { min-width:min(92vw,760px); padding:16px; }
+.contact-filters { display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center; margin-bottom:8px; }
+.search-label { display:flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:var(--radius-sm); padding:6px 8px; background:var(--surface-raised); }
+.search-label input { border:0; outline:0; background:transparent; width:100%; }
+.enroll-toolbar { display:flex; gap:12px; align-items:center; margin-bottom:8px; }
+.enroll-list { max-height:44vh; overflow:auto; }
+.row-enrolled { opacity:.55; background: repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(128,128,128,.09) 8px, rgba(128,128,128,.09) 16px); }
+.row-enrolled input { cursor:not-allowed; }
+
+/* KPI stat tiles */
+.stat-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; }
+

@@ -86,4 +86,8 @@ export function syncMailbox(organizationId: string, mailboxId: string) {
   return request<MailboxSyncResult>('/mailboxes/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ organizationId, mailboxId }) })
 }
 
+export function sendSequenceStep(organizationId: string, enrollmentId: string) {
+  return request<{ ok: true; enrollmentId: string; contactEmail: string; stepPosition: number; unsubscribeUrl: string }>('/sequences/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ organizationId, enrollmentId }) })
+}
+
 

@@ -4,7 +4,7 @@ import type { AuthSession } from '@supabase/supabase-js'
 import nodeworkLogo from './assets/nodework-logo-mark.png'
 import { SignIn } from './components/SignIn'
 import {
-  Activity, BarChart3, Building2, CheckSquare,
+  Activity, BarChart3, CheckSquare,
   ContactRound, Inbox, Layers3, Mail, Menu, Search, Settings, ShieldCheck,
   Plus, UsersRound, X,
 } from 'lucide-react'
@@ -17,8 +17,8 @@ import { EntityPage, RailCard, SlideOut } from './components/Overlay'
 const TeamPanel = lazy(() => import('./components/TeamPanel').then(module => ({ default: module.TeamPanel })))
 const InboxPanel = lazy(() => import('./components/InboxPanel').then(module => ({ default: module.InboxPanel })))
 const NotesPanel = lazy(() => import('./components/NotesPanel').then(module => ({ default: module.NotesPanel })))
-const ListsPanel = lazy(() => import('./components/ListsPanel').then(module => ({ default: module.ListsPanel })))
 const TemplatesPanel = lazy(() => import('./components/TemplatesPanel').then(module => ({ default: module.TemplatesPanel })))
+const SequenceTemplatesPanel = lazy(() => import('./components/SequenceTemplatesPanel').then(module => ({ default: module.SequenceTemplatesPanel })))
 const AnalyticsPanel = lazy(() => import('./components/AnalyticsPanel').then(module => ({ default: module.AnalyticsPanel })))
 const SequencesPanel = lazy(() => import('./components/SequencesPanel').then(module => ({ default: module.SequencesPanel })))
 const CampaignsPanel = lazy(() => import('./components/CampaignsPanel').then(module => ({ default: module.CampaignsPanel })))
@@ -29,10 +29,9 @@ const OverviewPanel = lazy(() => import('./components/OverviewPanel').then(modul
 
 const sections = [
   { title: 'Workspace', items: [
-    ['Overview', BarChart3], ['Inbox', Inbox], ['Companies', Building2],
-    ['Contacts', ContactRound], ['Leads & Lists', UsersRound], ['Prospecting', Search],
+    ['Overview', BarChart3], ['Inbox', Inbox], ['Contacts', ContactRound], ['Prospecting', Search],
   ] },
-  { title: 'Engagement', items: [['Sequences', Layers3], ['Campaigns', Mail], ['Templates', Mail]] },
+  { title: 'Engagement', items: [['Sequences', Layers3], ['Sequence Templates', Layers3], ['Campaigns', Mail], ['Templates', Mail]] },
   { title: 'Sales', items: [['Pipeline', Activity], ['Tasks & Activities', CheckSquare]] },
   { title: 'Insights', items: [['Analytics', BarChart3]] },
   { title: 'Administration', items: [['Integrations', Settings], ['Settings', Settings], ['Team & Audit', ShieldCheck]] },
@@ -45,16 +44,17 @@ const sectionTone: Record<string, string> = {
 
 const descriptions: Record<string, string> = {
   Overview: 'Your sales workspace, activity and next actions.', Inbox: 'Connect a custom-domain mailbox to work with conversations here.',
-  Contacts: 'Keep prospect and customer relationships organized.', Companies: 'Manage company records and related opportunities.',
-  'Leads & Lists': 'Qualify contacts and build useful audience lists.', Prospecting: 'Research contacts through configured providers or imports.',
+  Contacts: 'Keep people and companies organized in one place.', 'Prospecting': 'Add people and companies from licensed sources or imports.',
   Sequences: 'Create and manage multi-step sales follow-up.', Campaigns: 'Review audience, sender and schedule before a campaign launch.',
-  Templates: 'Create reusable email content with validated personalization.', Pipeline: 'Track opportunities through your configured sales stages.',
+  Templates: 'Create reusable email content with validated personalization.',
+  'Sequence Templates': 'Reusable sequence blueprints: all steps, timing and email content.',
+  Pipeline: 'Track opportunities through your configured sales stages.',
   'Tasks & Activities': 'Keep follow-ups and customer activity in one place.', Analytics: 'Review sales performance from connected, verified data.',
   Integrations: 'Configure mailbox and external service connections.', Settings: 'Manage workspace preferences and operating rules.',
   'Team & Audit': 'Review team access and sensitive workspace actions.',
 }
 
-const implementedPages = new Set(['Overview', 'Inbox', 'Contacts', 'Companies', 'Pipeline', 'Tasks & Activities', 'Team & Audit', 'Leads & Lists', 'Templates', 'Analytics', 'Sequences', 'Campaigns', 'Integrations', 'Settings', 'Prospecting'])
+const implementedPages = new Set(['Overview', 'Inbox', 'Contacts', 'Prospecting', 'Pipeline', 'Tasks & Activities', 'Team & Audit', 'Templates', 'Sequence Templates', 'Analytics', 'Sequences', 'Campaigns', 'Integrations', 'Settings'])
 
 export default function App() {
   const [page, setPage] = useState('Overview')
@@ -115,7 +115,7 @@ export default function App() {
       <section className="content"><div className="page-heading"><div><div className="eyebrow">EIDEN Reach</div><h1>{page}</h1><p>{descriptions[page]}</p></div></div>
 <Suspense fallback={<div className="table-message">Loading screen…</div>}>
                 {!databaseConfigured && <div className="notice"><div className="notice-icon"><Settings size={18} /></div><div><b>Connect the workspace database to get started</b><p>Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in your local environment after creating a Supabase project. The browser key is public by design; access must be enforced with database row policies.</p></div></div>}
-        {page === 'Inbox' ? session ? <InboxPanel userId={session.user.id} canConnect={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : <div className="inbox-empty panel"><div className="empty-icon"><Inbox size={22} /></div><h2>Sign in to connect a mailbox</h2><p>Mailbox credentials are only handled by a trusted server. No inbox data is shown in setup mode.</p></div> : page === 'Overview' && session ? <OverviewPanel userId={session.user.id} /> : page === 'Contacts' && session ? <ContactsPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Companies' && session ? <CompaniesPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Prospecting' && session ? <ProspectingPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Pipeline' && session ? <PipelinePanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Tasks & Activities' && session ? <TasksPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} canManage={['super_admin', 'sales_manager'].includes(memberRole)} /> : page === 'Leads & Lists' && session ? <ListsPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Templates' && session ? <TemplatesPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Analytics' && session ? <AnalyticsPanel userId={session.user.id} /> : page === 'Sequences' && session ? <SequencesPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Campaigns' && session ? <CampaignsPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Integrations' && session ? <IntegrationsPanel userId={session.user.id} /> : page === 'Settings' && session ? <SettingsPanel userId={session.user.id} email={session.user.email ?? ''} profile={profile} onProfileChange={setProfile} /> : page === 'Team & Audit' && session ? <TeamPanel userId={session.user.id} role={memberRole} /> : <div className="panel empty-panel"><div className="empty-icon"><EmptyIcon page={page} /></div><h2>{!implementedPages.has(page) ? 'Under development' : databaseConfigured ? 'No records yet' : 'Waiting for workspace setup'}</h2><p>{!implementedPages.has(page) ? 'This area is not connected to working product features yet. No sample data or integration status is being shown.' : databaseConfigured ? 'This section will show records from the connected workspace.' : 'Connect authentication and the database to enable this section. No sample business data is shown.'}</p></div>}
+        {page === 'Inbox' ? session ? <InboxPanel userId={session.user.id} canConnect={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : <div className="inbox-empty panel"><div className="empty-icon"><Inbox size={22} /></div><h2>Sign in to connect a mailbox</h2><p>Mailbox credentials are only handled by a trusted server. No inbox data is shown in setup mode.</p></div> : page === 'Overview' && session ? <OverviewPanel userId={session.user.id} /> : page === 'Contacts' && session ? <PeoplePanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Prospecting' && session ? <ProspectingPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Pipeline' && session ? <PipelinePanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Tasks & Activities' && session ? <TasksPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} canManage={['super_admin', 'sales_manager'].includes(memberRole)} /> : page === 'Templates' && session ? <TemplatesPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Sequence Templates' && session ? <SequenceTemplatesPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Analytics' && session ? <AnalyticsPanel userId={session.user.id} /> : page === 'Sequences' && session ? <SequencesPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Campaigns' && session ? <CampaignsPanel userId={session.user.id} canWrite={['super_admin', 'sales_manager', 'sales_representative'].includes(memberRole)} /> : page === 'Integrations' && session ? <IntegrationsPanel userId={session.user.id} /> : page === 'Settings' && session ? <SettingsPanel userId={session.user.id} email={session.user.email ?? ''} profile={profile} onProfileChange={setProfile} /> : page === 'Team & Audit' && session ? <TeamPanel userId={session.user.id} role={memberRole} /> : <div className="panel empty-panel"><div className="empty-icon"><EmptyIcon page={page} /></div><h2>{!implementedPages.has(page) ? 'Under development' : databaseConfigured ? 'No records yet' : 'Waiting for workspace setup'}</h2><p>{!implementedPages.has(page) ? 'This area is not connected to working product features yet. No sample data or integration status is being shown.' : databaseConfigured ? 'This section will show records from the connected workspace.' : 'Connect authentication and the database to enable this section. No sample business data is shown.'}</p></div>}
         </Suspense>
         <footer className="page-footer"><span>EIDEN Reach · Sales operations</span><span>Tenant-scoped access · audited administrative actions</span></footer>
       </section>
@@ -123,6 +123,17 @@ export default function App() {
   </div>
 }
 
+
+function PeoplePanel({ userId, canWrite }: { userId: string; canWrite: boolean }) {
+  const [tab, setTab] = useState<'contacts' | 'companies'>('contacts')
+  return <div className="people-page">
+    <div className="people-tabs" role="tablist" aria-label="People views">
+      <button type="button" role="tab" aria-selected={tab === 'contacts'} className={tab === 'contacts' ? 'tab-active' : ''} onClick={() => setTab('contacts')}>Contacts</button>
+      <button type="button" role="tab" aria-selected={tab === 'companies'} className={tab === 'companies' ? 'tab-active' : ''} onClick={() => setTab('companies')}>Companies</button>
+    </div>
+    {tab === 'contacts' ? <ContactsPanel userId={userId} canWrite={canWrite} /> : <CompaniesPanel userId={userId} canWrite={canWrite} />}
+  </div>
+}
 
 type Contact = { id: string; first_name: string; last_name: string; email: string | null; job_title: string | null; lifecycle: string; company_id: string | null }
 type ContactCompany = { id: string; name: string }
@@ -476,7 +487,7 @@ function PipelinePanel({ userId, canWrite }: { userId: string; canWrite: boolean
 }
 
 function EmptyIcon({ page }: { page: string }) {
-  if (page === 'Companies') return <Building2 size={22} />
+  if (page === 'Contacts') return <UsersRound size={22} />
   if (page === 'Tasks & Activities') return <CheckSquare size={22} />
   if (page === 'Pipeline') return <Activity size={22} />
   if (page === 'Team & Audit') return <ShieldCheck size={22} />

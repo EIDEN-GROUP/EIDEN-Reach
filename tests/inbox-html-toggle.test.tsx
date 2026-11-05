@@ -56,14 +56,15 @@ describe('Inbox HTML rendering', () => {
     const { container } = render(<InboxPanel userId="user-1" canConnect={false} />)
 
     await waitFor(() => expect(screen.getByText(/Sales mailbox/i)).toBeInTheDocument())
-    await waitFor(() => expect((container.querySelector('.message-body') as HTMLElement)?.textContent).toBe('plain text'))
+    await waitFor(() => expect((container.querySelector('.inbox-message-body') as HTMLElement)?.textContent).toBe('plain text'))
 
-    await user.click(screen.getByRole('button', { name: /show html/i }))
-    const iframe = screen.getByTitle(/HTML view/i) as HTMLIFrameElement
-    expect(iframe.getAttribute('sandbox')).toBe('')
-    expect(iframe.srcdoc).toContain('trusted')
+    await user.click(screen.getByRole('button', { name: /formatted/i }))
+    const iframe = container.querySelector('.inbox-html') as HTMLIFrameElement | null
+    expect(iframe).not.toBeNull()
+    expect(iframe!.getAttribute('sandbox')).toBe('')
+    expect(iframe!.srcdoc).toContain('trusted')
 
-    await user.click(screen.getByRole('button', { name: /show text/i }))
-    expect((container.querySelector('.message-body') as HTMLElement)?.textContent).toBe('plain text')
+    await user.click(screen.getByRole('button', { name: /^plain text$/i }))
+    expect((container.querySelector('.inbox-message-body') as HTMLElement)?.textContent).toBe('plain text')
   })
 })
