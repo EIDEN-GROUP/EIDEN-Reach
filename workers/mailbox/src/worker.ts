@@ -124,22 +124,6 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return response(result.body as Record<string, unknown>, 200, origin, env)
   }
 
-  if (url.pathname === '/system/reply-check' && request.method === 'POST') {
-    const token = request.headers.get('x-dispatch-secret') ?? ''
-    const expected = env.DISPATCH_TOKEN
-    const ok = !!expected && token === expected
-    if (!ok) return response({ error: 'Unauthorized' }, 401, origin, env)
-    const body = await request.json().catch(() => ({})) as { organizationId?: string; mailboxId?: string }
-    const orgId = body.organizationId ?? '11111111-1111-4111-8111-111111111111'
-    const mailboxId = body.mailboxId ?? '46639619-33ec-4e44-99e4-ceb60e9e5f8a'
-    const count = await reconcileReplyStoppedEnrollments(env, orgId, mailboxId)
-    const enrUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/sequence_enrollments`)
-    enrUrl.searchParams.set('select', 'id,state,stop_reason,next_step_position,contact_id')
-    enrUrl.searchParams.set('organization_id', `eq.${orgId}`)
-    const states = await (await fetch(enrUrl, { headers: serviceHeaders(env) })).json()
-    return response({ count, states }, 200, origin, env)
-  }
-
   const identity = await verifyIdentity(request, env)
   if (!identity) return response({ error: 'Sign in to manage a mailbox.' }, 401, origin, env)
 
