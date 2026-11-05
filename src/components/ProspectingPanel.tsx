@@ -32,6 +32,7 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [industries, setIndustries] = useState<string[]>([])
   const [addForm, setAddForm] = useState({ firstName: '', lastName: '', email: '', phone: '', jobTitle: '', companyId: '', companyName: '', companyDomain: '', industry: '', location: '' , language: '', city: '', country: '' })
 
   useEffect(() => {
@@ -42,8 +43,10 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
       if (membership.data) {
         setOrgId(membership.data.organization_id)
         const res = await supabase!.from('companies').select('id,name').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name').limit(500)
+        const iRes = await supabase!.from('industry_categories').select('name').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name')
         if (!active) return
         if (!res.error) setCompanies(res.data ?? [])
+        if (!iRes.error) setIndustries((iRes.data ?? []).map((r: { name: string }) => r.name))
       }
       setLoading(false)
     })()
@@ -88,7 +91,7 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
         companyId = insertedCompany.data.id
         setCompanies(current => [...current, insertedCompany.data].sort((a, b) => a.name.localeCompare(b.name)))
       }
-      const result = await supabase!.from('contacts').insert({ organization_id: orgId, first_name: addForm.firstName.trim(), last_name: addForm.lastName.trim() || '', email, phone: addForm.phone.trim() || null, job_title: addForm.jobTitle.trim() || null, company_id: companyId, owner_id: userId, created_by: userId, lifecycle: 'new', source: 'manual', language: addForm.language.trim() || null, city: addForm.city.trim() || null, country: addForm.country.trim() || null }).select('id')
+      const result = await supabase!.from('contacts').insert({ organization_id: orgId, first_name: addForm.firstName.trim(), last_name: addForm.lastName.trim() || '', email, phone: addForm.phone.trim() || null, job_title: addForm.jobTitle.trim() || null, company_id: companyId, owner_id: userId, created_by: userId, lifecycle: 'new', source: 'manual', industry: addForm.industry || null, language: addForm.language.trim() || null, city: addForm.city.trim() || null, country: addForm.country.trim() || null }).select('id')
       if (result.error) {
         setError(result.error.code === '23505' ? 'A contact with that email already exists.' : 'Contact could not be saved.')
         setSaving(false)
@@ -229,6 +232,7 @@ export function ProspectingPanel({ userId, canWrite }: { userId: string; canWrit
         <label>Email<input type="email" value={addForm.email} onChange={e => handleAddNameField('email', e.target.value)} required maxLength={320} /></label>
         <label>Phone<input value={addForm.phone} onChange={e => handleAddNameField('phone', e.target.value)} maxLength={40} placeholder="+1 555 0101" /></label>
         <label>Job title<input value={addForm.jobTitle} onChange={e => handleAddNameField('jobTitle', e.target.value)} maxLength={200} placeholder="Managing Director" /></label>
+              <label>Industry<select value={addForm.industry} onChange={e => handleAddNameField('industry', e.target.value)}><option value="">No industry</option>{industries.map(ic => (<option key={ic} value={ic}>{ic}</option>))}</select></label>
         <div className="template-grid">
           <label>Link to existing company<select value={addForm.companyId} onChange={e => handleAddNameField('companyId', e.target.value)}><option value="">— create a new one —</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>
           <label>Company name<input value={addForm.companyName} onChange={e => handleAddNameField('companyName', e.target.value)} maxLength={200} placeholder="Example Holdings" disabled={!!addForm.companyId} /></label>
