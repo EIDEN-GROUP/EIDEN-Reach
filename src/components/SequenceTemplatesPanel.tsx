@@ -9,6 +9,9 @@ export type SequenceTemplate = {
   name: string
   description: string | null
   category: string
+  language?: string | null
+  city?: string | null
+  country?: string | null
   archived_at: string | null
 }
 export type SequenceTemplateStep = {
@@ -25,7 +28,7 @@ export type SequenceTemplateStep = {
   time_zone_policy: string
 }
 
-const defaultDraft = { name: '', description: '', category: 'sales', steps: [] as Array<Partial<SequenceTemplateStep> & { delayDays: string }> }
+const defaultDraft = { name: '', description: '', category: 'sales', language: '', city: '', country: '', steps: [] as Array<Partial<SequenceTemplateStep> & { delayDays: string }> }
 
 export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; canWrite: boolean }) {
   const [orgId, setOrgId] = useState('')
@@ -50,13 +53,13 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
       const orgIdLocal = membership.data.organization_id
       setOrgId(orgIdLocal)
       const [tplRes, stepRes] = await Promise.all([
-        supabase!.from('sequence_templates').select('id,name,description,category,archived_at').eq('organization_id', orgIdLocal).is('archived_at', null).order('name'),
+        supabase!.from('sequence_templates').select('id,name,description,category,language,city,country,archived_at').eq('organization_id', orgIdLocal).is('archived_at', null).order('name'),
         supabase!.from('sequence_template_steps').select('id,template_id,position,kind,subject,html_body,text_body,delay_minutes,delay_unit,business_days_only,time_zone_policy').in('template_id', (await supabase!.from('sequence_templates').select('id').eq('organization_id', orgIdLocal)).data?.map((t: { id: string }) => t.id) ?? ['00000000-0000-0000-0000-000000000000']).order('position'),
       ])
       if (!active) return
       if (tplRes.error || stepRes.error) setError('Sequence templates could not be loaded.')
       else {
-        setTemplates(tplRes.data ?? [])
+        setTemplates(((tplRes.data ?? []).map(t => ({ ...t, language: t.language ?? null, city: t.city ?? null, country: t.country ?? null }))))
         setSteps((stepRes.data ?? []) as SequenceTemplateStep[])
       }
       setLoading(false)
@@ -75,7 +78,7 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
   function startEdit(template: SequenceTemplate) {
     setEditing(template)
     const tmplSteps = steps.filter(s => s.template_id === template.id).sort((a, b) => a.position - b.position)
-    setDraft({ name: template.name, description: template.description ?? '', category: template.category, steps: tmplSteps.map(s => ({ ...s, delayDays: String(Math.round((s.delay_minutes ?? 0) / 1440)) })) })
+    setDraft({ name: template.name, description: template.description ?? '', category: template.category, language: template.language ?? '', city: template.city ?? '', country: template.country ?? '', steps: tmplSteps.map(s => ({ ...s, delayDays: String(Math.round((s.delay_minutes ?? 0) / 1440)) })) })
     setError('')
     setMessage('')
     setOpenId(template.id)
@@ -92,11 +95,11 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
     try {
       let templateId = editing?.id
       if (!templateId) {
-        const inserted = await supabase!.from('sequence_templates').insert({ organization_id: orgId, owner_id: userId, name: draft.name.trim(), description: draft.description.trim() || null, category: draft.category }).select('id').single()
+        const inserted = await supabase!.from('sequence_templates').insert({ organization_id: orgId, owner_id: userId, name: draft.name.trim(), description: draft.description.trim() || null, category: draft.category, language: draft.language.trim() || null, city: draft.city.trim() || null, country: draft.country.trim() || null }).select('id').single()
         if (inserted.error) throw inserted.error
         templateId = inserted.data.id as string
       } else {
-        const updated = await supabase!.from('sequence_templates').update({ name: draft.name.trim(), description: draft.description.trim() || null, category: draft.category }).eq('id', templateId).eq('organization_id', orgId)
+        const updated = await supabase!.from('sequence_templates').update({ name: draft.name.trim(), description: draft.description.trim() || null, category: draft.category, language: draft.language.trim() || null, city: draft.city.trim() || null, country: draft.country.trim() || null }).eq('id', templateId).eq('organization_id', orgId)
         if (updated.error) throw updated.error
         await supabase!.from('sequence_template_steps').delete().eq('template_id', templateId)
       }
@@ -118,10 +121,10 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
       }
       // reload panel data
       const [tplRes, stepRes] = await Promise.all([
-        supabase!.from('sequence_templates').select('id,name,description,category,archived_at').eq('organization_id', orgId).is('archived_at', null).order('name'),
+        supabase!.from('sequence_templates').select('id,name,description,category,language,city,country,archived_at').eq('organization_id', orgId).is('archived_at', null).order('name'),
         supabase!.from('sequence_template_steps').select('id,template_id,position,kind,subject,html_body,text_body,delay_minutes,delay_unit,business_days_only,time_zone_policy').in('template_id', (await supabase!.from('sequence_templates').select('id').eq('organization_id', orgId)).data?.map((t: { id: string }) => t.id) ?? ['00000000-0000-0000-0000-000000000000']).order('position'),
       ])
-      setTemplates(tplRes.data ?? [])
+      setTemplates(((tplRes.data ?? []).map(t => ({ ...t, language: t.language ?? null, city: t.city ?? null, country: t.country ?? null }))))
       setSteps((stepRes.data ?? []) as SequenceTemplateStep[])
       setOpenId(null)
       setEditing(null)
@@ -186,6 +189,9 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
           <label className="span-2">Name<input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} required maxLength={200} placeholder="Standard B2B Outreach" /></label>
           <label className="span-2">Description<input value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} maxLength={500} placeholder="Five follow-ups over 20 days, stop on reply" /></label>
           <label>Category<select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}><option value="sales">Sales</option><option value="marketing">Marketing</option></select></label>
+          <label>Language<input value={draft.language} onChange={e => setDraft({ ...draft, language: e.target.value })} maxLength={40} placeholder="en" /></label>
+          <label>City<input value={draft.city} onChange={e => setDraft({ ...draft, city: e.target.value })} maxLength={120} placeholder="Austin" /></label>
+          <label>Country<input value={draft.country} onChange={e => setDraft({ ...draft, country: e.target.value })} maxLength={80} placeholder="United States" /></label>
         </div>
 
         <h3 className="builder-title">Steps</h3>

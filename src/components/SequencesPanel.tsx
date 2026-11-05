@@ -9,7 +9,8 @@ import type { SequenceTemplateListItem } from './sequenceTemplateTypes'
 
 export type { SequenceTemplateListItem }
 
-type Sequence = { id: string; name: string; description: string | null; status: string; category: string; current_version: number; daily_limit: number | null; archived_at: string | null; sender_mailbox_id: string | null; source_template_id?: string | null }
+type Sequence = { id: string; name: string; description: string | null; status: string; category: string; current_version: number; daily_limit: number | null; archived_at: string | null; sender_mailbox_id: string | null; source_template_id?: string | null; language?: string | null; city?: string | null; country?: string | null }
+
 type Step = { id: string; position: number; kind: string; delay_minutes: number; business_days_only: boolean; time_zone_policy: string; template_id: string | null }
 type Enrollment = { id: string; contact_id: string; state: string; enrolled_at: string; next_step_position: number; next_run_at: string | null; stopped_at: string | null; stop_reason: string | null; contacts: { first_name: string; last_name: string; email: string | null } | null }
 type Mailbox = { id: string; email_address: string; display_name: string | null }
@@ -219,7 +220,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
 
   function select(seq: Sequence) {
     setSelectedId(seq.id)
-    setDraft({ name: seq.name, description: seq.description ?? '', status: seq.status, dailyLimit: seq.daily_limit?.toString() ?? '', senderMailboxId: seq.sender_mailbox_id ?? '' })
+    setDraft({ name: seq.name, description: seq.description ?? '', status: seq.status, dailyLimit: seq.daily_limit?.toString() ?? '', senderMailboxId: seq.sender_mailbox_id ?? '', language: seq.language ?? '', city: seq.city ?? '', country: seq.country ?? '' })
     setSendNotice('')
   }
 
@@ -236,7 +237,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       setSaving(false)
       return
     }
-    const result = await supabase!.from('sequences').update({ name: draft.name.trim(), description: draft.description.trim() || null, status: draft.status, daily_limit: dailyLimit, sender_mailbox_id: draft.senderMailboxId || null }).eq('id', selected.id).eq('organization_id', orgId).select(SEQUENCE_COLUMNS).single()
+    const result = await supabase!.from('sequences').update({ name: draft.name.trim(), description: draft.description.trim() || null, status: draft.status, daily_limit: dailyLimit, sender_mailbox_id: draft.senderMailboxId || null, language: draft.language.trim() || null, city: draft.city.trim() || null, country: draft.country.trim() || null }).eq('id', selected.id).eq('organization_id', orgId).select(SEQUENCE_COLUMNS).single()
     if (result.error) {
       const message = result.error.message
       setError(message.includes('at least one step') ? 'Add at least one step before activating this sequence.' : message.includes('requires a template') ? 'Every email step needs a template before activation.' : 'Sequence changes could not be saved.')
@@ -535,7 +536,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
             <label>Status<select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })} disabled={!canWrite}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option></select></label>
             <label>Daily limit<input inputMode="numeric" value={draft.dailyLimit} onChange={e => setDraft({ ...draft, dailyLimit: e.target.value })} placeholder="No limit" disabled={!canWrite} /></label>
             <label className="span-2">Sender mailbox<select value={draft.senderMailboxId} onChange={e => setDraft({ ...draft, senderMailboxId: e.target.value })} disabled={!canWrite}><option value="">Select a mailbox</option>{mailboxes.map(mb => <option key={mb.id} value={mb.id}>{mb.display_name ? `${mb.display_name} <${mb.email_address}>` : mb.email_address}</option>)}</select></label>
-            {canWrite && <div className="form-actions span-2"><button className="primary-button" disabled={saving}>{saving ? 'Savingâ€¦' : 'Save changes'}</button></div>}
+            {canWrite && <div className="form-actions span-2"><button className="primary-button" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button></div>}
           </form>
         </section>
 
