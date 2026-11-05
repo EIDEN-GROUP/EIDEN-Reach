@@ -1,23 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { AVATAR_MAX_BYTES, ensureProfile, loadProfile, removeAvatar, saveDisplayName, uploadAvatar } from '../lib/profile'
 import type { Profile } from '../lib/profile'
 import { ProfileAvatar } from './ProfileAvatar'
+import { SlideOut } from './Overlay'
 
 type Member = { organization_id: string; role: string }
+type Industry = { id: string; name: string; description: string | null; archived_at: string | null }
 
 export function SettingsPanel({
   userId,
   email,
   profile,
   onProfileChange,
+  canWrite,
 }: {
   userId: string
   email: string
   profile: Profile | null
   onProfileChange: (profile: Profile | null) => void
+  canWrite: boolean
 }) {
+  const [orgId, setOrgId] = useState('')
   const [orgName, setOrgName] = useState('')
   const [role, setRole] = useState('')
   const [loading, setLoading] = useState(true)
@@ -25,7 +31,14 @@ export function SettingsPanel({
   const [notice, setNotice] = useState('')
   const [name, setName] = useState(profile?.display_name ?? '')
   const [busy, setBusy] = useState(false)
-  const fileInput = useRef<HTMLInputElement>(null)
+  const fileInput = useRef<HTMLInputElement | null>(null)
+
+  // Industries
+  const [industries, setIndustries] = useState<Industry[]>([])
+  const [indOpen, setIndOpen] = useState(false)
+  const [newIndName, setNewIndName] = useState('')
+  const [newIndDesc, setNewIndDesc] = useState('')
+  const [indBusy, setIndBusy] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -34,6 +47,7 @@ export function SettingsPanel({
       if (!active) return
       if (membership.error || !membership.data) { setError('Your account is not assigned to a workspace.'); setLoading(false); return }
       setRole((membership.data as Member).role)
+      setOrgId((membership.data as Member).organization_id)
       const org = await supabase!.from('organizations').select('name').eq('id', (membership.data as Member).organization_id).maybeSingle()
       if (active) setOrgName(org.data?.name ?? '')
       setLoading(false)
@@ -41,7 +55,6 @@ export function SettingsPanel({
     return () => { active = false }
   }, [userId])
 
-  // Make sure a profile row exists (CREATE), then keep the parent's copy in sync (READ).
   useEffect(() => {
     let active = true
     void (async () => {
@@ -54,11 +67,20 @@ export function SettingsPanel({
       }
     })()
     return () => { active = false }
-    // onProfileChange is a stable setter from the parent; load once per user.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
   useEffect(() => { setName(profile?.display_name ?? '') }, [profile?.display_name])
+
+  useEffect(() => {
+    if (!orgId) return
+    let active = true
+    void (async () => {
+      const res = await supabase!.from('industry_categories').select('id,name,description,archived_at').eq('organization_id', orgId).is('archived_at', null).order('name')
+      if (active && !res.error) setIndustries(res.data ?? [])
+    })()
+    return () => { active = false }
+  }, [orgId])
 
   async function run(action: () => Promise<void>) {
     setBusy(true); setError(''); setNotice('')
@@ -67,7 +89,6 @@ export function SettingsPanel({
     finally { setBusy(false) }
   }
 
-  // UPDATE display name
   function saveName(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     void run(async () => {
@@ -76,9 +97,8 @@ export function SettingsPanel({
     })
   }
 
-  // CREATE/UPDATE picture
   function onFilePicked(file: File | undefined) {
-    if (fileInput.current) fileInput.current.value = ''
+    if (fileInput && fileInput.current) fileInput.current.value = ''
     if (!file) return
     void run(async () => {
       onProfileChange(await uploadAvatar(userId, file))
@@ -86,7 +106,6 @@ export function SettingsPanel({
     })
   }
 
-  // DELETE picture
   function deletePicture() {
     if (!profile?.avatar_path || !window.confirm('Remove your profile picture?')) return
     const currentPath = profile.avatar_path
@@ -96,9 +115,37 @@ export function SettingsPanel({
     })
   }
 
+  async function saveIndustry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!newIndName.trim()) { setError('Industry name is required.'); return }
+    setIndBusy(true); setError('')
+    try {
+      const result = await supabase!.from('industry_categories').insert({ organization_id: orgId, name: newIndName.trim(), description: newIndDesc.trim() || null, created_by: userId }).select('id,name,description,archived_at').single()
+      if (result.error) {
+        if (result.error.code === '23505') throw new Error('An industry with that name already exists.')
+        throw new Error(result.error.message)
+      }
+      setIndustries(current => [...current, result.data].sort((a, b) => a.name.localeCompare(b.name)))
+      setNewIndName(''); setNewIndDesc(''); setIndOpen(false)
+      setNotice('Industry added.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not save industry.')
+    } finally {
+      setIndBusy(false)
+    }
+  }
+
+  async function archiveIndustry(industry: Industry) {
+    if (!window.confirm(`Remove industry "${industry.name}"? This is safe if no contact is still using it.`)) return
+    const result = await supabase!.from('industry_categories').update({ archived_at: new Date().toISOString() }).eq('id', industry.id)
+    if (result.error) setError('Could not remove industry.')
+    else setIndustries(current => current.filter(item => item.id !== industry.id))
+  }
+
   const displayLabel = profile?.display_name || email || 'You'
   const dbConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)
   const mailboxConfigured = Boolean(import.meta.env.VITE_MAILBOX_WORKER_URL)
+
 
   return <>
     <section className="panel settings-section">
@@ -123,6 +170,37 @@ export function SettingsPanel({
           </div>
         </form>
       </div>
+    </section>
+
+    <section className="panel settings-section">
+      <div className="panel-heading">
+        <div><h2>Industries</h2><p>Manage the categorized list used across contacts, companies, and sequences. Email-verified opt-ins are still honored.</p></div>
+        {canWrite ? <button type="button" className="primary-button" disabled={!orgId} onClick={() => setIndOpen(true)}><Plus size={15} /> Add industry</button> : null}
+      </div>
+      <SlideOut open={indOpen} onClose={() => setIndOpen(false)} title="Add industry" description="Add a new industry category to this workspace.">
+        <form className="slideout-form" onSubmit={saveIndustry}>
+          <label>Name<input value={newIndName} onChange={event => setNewIndName(event.target.value)} required maxLength={100} placeholder="e.g. Telecommunications" /></label>
+          <label>Description<input value={newIndDesc} onChange={event => setNewIndDesc(event.target.value)} maxLength={200} placeholder="Optional description" /></label>
+          <div className="slideout-actions">
+            <button type="button" className="secondary-button" onClick={() => setIndOpen(false)} disabled={indBusy}>Cancel</button>
+            <button type="submit" className="primary-button" disabled={indBusy || !orgId}>{indBusy ? 'Saving…' : 'Add industry'}</button>
+          </div>
+        </form>
+      </SlideOut>
+      {industries.length ? (
+        <div className="contact-table-wrap">
+          <table className="contact-table">
+            <thead><tr><th>Name</th><th>Description</th><th>Actions</th></tr></thead>
+            <tbody>{industries.map(item => (
+              <tr key={item.id}>
+                <td><b>{item.name}</b></td>
+                <td>{item.description || '—'}</td>
+                <td><button type="button" className="archive-button" onClick={() => void archiveIndustry(item)}>Remove</button></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : <div className="table-message">No industries yet. Click "Add industry" to manage this list.</div>}
     </section>
 
     <section className="panel settings-section">
