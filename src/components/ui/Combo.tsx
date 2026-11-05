@@ -37,8 +37,8 @@ export default function Combo({
       </div>
       <ComboboxPortal>
         <ComboboxPositioner>
-          <ComboboxPopup className="min-w-[200px]">
-            <ComboboxEmpty className="px-3 py-2 text-xs text-muted-foreground">
+          <ComboboxPopup className="min-w-[220px] rounded-md border border-gray-300 bg-white shadow-md">
+            <ComboboxEmpty className="px-3 py-2 text-xs text-gray-500">
               No matches.
             </ComboboxEmpty>
             <ComboboxList>
