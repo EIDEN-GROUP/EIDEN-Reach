@@ -12,6 +12,7 @@ export type SequenceTemplate = {
   name: string
   description: string | null
   category: string
+  industry?: string | null
   language?: string | null
   city?: string | null
   country?: string | null
@@ -31,10 +32,11 @@ export type SequenceTemplateStep = {
   time_zone_policy: string
 }
 
-const defaultDraft = { name: '', description: '', category: 'sales', language: '', city: '', country: '', steps: [] as Array<Partial<SequenceTemplateStep> & { delayDays: string }> }
+const defaultDraft = { name: '', description: '', category: 'sales', industry: '', language: '', city: '', country: '', steps: [] as Array<Partial<SequenceTemplateStep> & { delayDays: string }> }
 
 export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; canWrite: boolean }) {
   const [orgId, setOrgId] = useState('')
+  const [industries, setIndustries] = useState<string[]>([])
   const [templates, setTemplates] = useState<SequenceTemplate[]>([])
   const [steps, setSteps] = useState<SequenceTemplateStep[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
@@ -64,6 +66,7 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
       else {
         setTemplates(((tplRes.data ?? []).map(t => ({ ...t, language: t.language ?? null, city: t.city ?? null, country: t.country ?? null }))))
         setSteps((stepRes.data ?? []) as SequenceTemplateStep[])
+        void (async () => { const iRes = await supabase!.from('industry_categories').select('name').eq('organization_id', orgIdLocal).is('archived_at', null).order('name'); if (!iRes.error && iRes.data) setIndustries(iRes.data.map((r: { name: string }) => r.name)) })()
       }
       setLoading(false)
     })()
@@ -81,7 +84,7 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
   function startEdit(template: SequenceTemplate) {
     setEditing(template)
     const tmplSteps = steps.filter(s => s.template_id === template.id).sort((a, b) => a.position - b.position)
-    setDraft({ name: template.name, description: template.description ?? '', category: template.category, language: template.language ?? '', city: template.city ?? '', country: template.country ?? '', steps: tmplSteps.map(s => ({ ...s, delayDays: String(Math.round((s.delay_minutes ?? 0) / 1440)) })) })
+    setDraft({ name: template.name, description: template.description ?? '', category: template.category, industry: template.industry ?? '', language: template.language ?? '', city: template.city ?? '', country: template.country ?? '', steps: tmplSteps.map(s => ({ ...s, delayDays: String(Math.round((s.delay_minutes ?? 0) / 1440)) })) })
     setError('')
     setMessage('')
     setOpenId(template.id)
@@ -176,7 +179,7 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
     {message && <p className="success-message" role="status">{message}</p>}
 
     {loading ? <div className="table-message">Loading sequence templates…</div> : templates.length ? <div className="contact-table-wrap"><table className="contact-table">
-      <thead><tr><th>Name</th><th>Steps</th><th>Duration</th><th>Category</th><th aria-label="Actions" /></tr></thead>
+      <thead><tr><th>Name</th><th>Steps</th><th>Duration</th><th>Industry</th><th aria-label="Actions" /></tr></thead>
       <tbody>{templates.map(template => <tr key={template.id}>
         <td><button className="text-action" type="button" onClick={() => startEdit(template)}>{template.name}</button>{template.description && <><br /><small>{template.description}</small></>}</td>
         <td>{stepsFor(template.id).length}</td>
@@ -191,7 +194,7 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
         <div className="template-grid">
           <label className="span-2">Name<input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} required maxLength={200} placeholder="Standard B2B Outreach" /></label>
           <label className="span-2">Description<input value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} maxLength={500} placeholder="Five follow-ups over 20 days, stop on reply" /></label>
-          <label>Category<select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}><option value="sales">Sales</option><option value="marketing">Marketing</option></select></label>
+          <label>Industry<select value={draft.industry} onChange={e => setDraft({ ...draft, industry: e.target.value })}><option value="">No industry</option>{industries.map(ic => (<option key={ic} value={ic}>{ic}</option>))}</select></label>
           <label><span className="input-label">Language</span><Typeahead value={draft.language} setValue={v => setDraft({ ...draft, language: v })} options={LANGUAGES} placeholder="en" /></label>
           <label><span className="input-label">City</span><Typeahead value={draft.city} setValue={v => setDraft({ ...draft, city: v })} options={CITIES} placeholder="Austin" /></label>
           <label><span className="input-label">Country</span><Typeahead value={draft.country} setValue={v => setDraft({ ...draft, country: v })} options={COUNTRIES} placeholder="United States" /></label>
