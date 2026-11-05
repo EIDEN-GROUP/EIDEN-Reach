@@ -279,6 +279,22 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     } else {
       setSequences(current => current.map(s => s.id === selected.id ? result.data as Sequence : s).sort((a, b) => a.name.localeCompare(b.name)))
       select(result.data as Sequence)
+      if (draft.status === 'active') {
+        // Kick off any currently-due enrollments immediately so the user
+        // doesn't wait 15 minutes for the worker cron.
+        void (async () => {
+          try {
+            await dispatchDue(orgId, 5)
+            setDispatchNotice('Auto-dispatch triggered (active): due emails processed.')
+            if (selectedId) {
+              const rr = await supabase!.from('sequence_enrollments').select('id,contact_id,state,enrolled_at,next_step_position,next_run_at,stopped_at,stop_reason,contacts:contact_id(first_name,last_name,email)').eq('sequence_id', selectedId).order('enrolled_at', { ascending: false }).limit(500)
+              if (!rr.error && rr.data) setEnrollments((rr.data as unknown as Enrollment[]))
+            }
+          } catch (e) {
+            setDispatchNotice('Auto-dispatch error: ' + (e instanceof Error ? e.message : 'unknown'))
+          }
+        })()
+      }
     }
     setSaving(false)
   }
