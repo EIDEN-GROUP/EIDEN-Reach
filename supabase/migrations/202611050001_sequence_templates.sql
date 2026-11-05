@@ -36,6 +36,11 @@ create index if not exists sequence_template_steps_order_idx on public.sequence_
 alter table public.sequence_templates enable row level security;
 alter table public.sequence_template_steps enable row level security;
 
+drop policy if exists "members read sequence templates" on public.sequence_templates;
+drop policy if exists "managers manage sequence templates" on public.sequence_templates;
+drop policy if exists "members read template steps" on public.sequence_template_steps;
+drop policy if exists "managers manage template steps" on public.sequence_template_steps;
+
 create policy "members read sequence templates" on public.sequence_templates for select to authenticated using (public.is_org_member(organization_id));
 create policy "managers manage sequence templates" on public.sequence_templates for all to authenticated using (public.is_org_member(organization_id)) with check (public.is_org_member(organization_id));
 create policy "members read template steps" on public.sequence_template_steps for select to authenticated using (template_id in (select id from public.sequence_templates where public.is_org_member(organization_id)));
@@ -65,6 +70,8 @@ create table if not exists public.unsubscribe_tokens (
 create index if not exists unsubscribe_tokens_token_idx on public.unsubscribe_tokens (token);
 create index if not exists unsubscribe_tokens_contact_idx on public.unsubscribe_tokens (contact_id);
 alter table public.unsubscribe_tokens enable row level security;
+drop policy if exists "members read tokens" on public.unsubscribe_tokens;
+
 create policy "members read tokens" on public.unsubscribe_tokens for select to authenticated using (public.is_org_member(organization_id));
 
 -- Optional per-org toggle to double-check suppression before send.

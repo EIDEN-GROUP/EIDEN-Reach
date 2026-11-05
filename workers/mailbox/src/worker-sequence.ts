@@ -27,7 +27,8 @@ async function rest<T>(env: Env, path: string, init?: RequestInit): Promise<T> {
 async function notifySlack(webhookUrl: string | undefined, message: string) {
   if (!webhookUrl) return
   try {
-    await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: message }) })
+    const body = JSON.stringify({ text: message })
+    await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'payload=' + encodeURIComponent(body) })
   } catch (error) {
     console.error('SLACK_NOTIFY_FAILED', error)
   }
@@ -55,7 +56,6 @@ export async function handleUnsubscribe(env: Env, token: string): Promise<Unsubs
     })
   }
 
-  // stop every other pending/active/paused enrollment for this contact in this workspace
   const pausedStates = ['pending', 'active', 'waiting', 'sending', 'paused']
   await rest(env, `sequence_enrollments?organization_id=eq.${record.organization_id}&contact_id=eq.${record.contact_id}&state=in.(${pausedStates.join(',')})`, {
     method: 'PATCH',
