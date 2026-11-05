@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { AlertTriangle, CheckCircle2, Mail, Plus, Trash2, Pause, Play, XCircle, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { sendSequenceStep } from '../lib/mailbox-api'
+import { sendSequenceStep, dispatchDue } from '../lib/mailbox-api'
 import { calculateSequenceKpis, formatKpi, type SequenceKpis } from '../lib/dashboard-metrics'
 import { EntityPage, RailCard, SlideOut, CenterDialog } from './Overlay'
 import type { SequenceTemplateListItem } from './sequenceTemplateTypes'
@@ -53,6 +53,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [sendNotice, setSendNotice] = useState('')
+  const [dispatchNotice, setDispatchNotice] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -358,7 +359,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       const ok = await enrollContact(contactId)
       if (ok) added += 1; else failed += 1
     }
-    setEnrollInfo(`Enrolled ${added}${failed ? ` · ${failed} already enrolled or failed` : ''}`)
+    setEnrollInfo(`Enrolled ${added}${failed ? ` Â· ${failed} already enrolled or failed` : ''}`)
     setEnrollSelected({})
     setSaving(false)
   }
@@ -390,6 +391,21 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       setSendNotice(sendError instanceof Error ? sendError.message : 'Send failed.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function dispatchNow() {
+    if (!canWrite || !orgId) return
+    setDispatchNotice('Dispatching\u2026')
+    try {
+      const res = await dispatchDue(orgId, 5)
+      if (selectedId) {
+        const r = await supabase!.from('sequence_enrollments').select('id,contact_id,state,enrolled_at,next_step_position,next_run_at,stopped_at,stop_reason,contacts:contact_id(first_name,last_name,email)').eq('sequence_id', selectedId).order('enrolled_at', { ascending: false }).limit(500)
+        if (!r.error && r.data) setEnrollments((r.data as unknown as Enrollment[]))
+      }
+      setDispatchNotice(`Dispatched ${res.claimed} due \u00b7 ${res.succeeded} sent \u00b7 ${res.retried} skipped \u00b7 ${res.failed} failed`)
+    } catch (err) {
+      setDispatchNotice(err instanceof Error ? err.message : 'Dispatch failed.')
     }
   }
 
@@ -453,8 +469,9 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     <div className="panel-heading">
       <div><h2>Sequences</h2><p>Multi-step follow-up that stops automatically when a contact replies.</p></div>
       {canWrite && <div className="panel-actions">
-        <button className="secondary-button" type="button" disabled={saving || templateLoading || !orgId} onClick={() => void useStandardTemplate()}>{templateLoading ? 'Creating…' : 'Use 5-email template'}</button>
+        <button className="secondary-button" type="button" disabled={saving || templateLoading || !orgId} onClick={() => void useStandardTemplate()}>{templateLoading ? 'Creatingâ€¦' : 'Use 5-email template'}</button>
         <button className="primary-button" type="button" disabled={!orgId} onClick={() => setCreateOpen(true)}><Plus size={15} /> New sequence</button>
+        {canWrite && <button className="secondary-button" type="button" disabled={saving || !orgId} onClick={() => void dispatchNow()} title="Process all due enrollments now.">Dispatch due emails</button>}
       </div>}
     </div>
     {error && <p className="inline-error" role="alert">{error}</p>}
@@ -479,13 +496,13 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       </tr>)}</tbody>
     </table></div> : <div className="table-message">No sequences yet. {canWrite ? 'Create one, or start from the 5-email template.' : 'No sequences are available.'}</div>}
 
-    <SlideOut open={createOpen} onClose={() => setCreateOpen(false)} title="New sequence" description="Give the sequence a name, or start from a sequence template — the steps are copied automatically.">
+    <SlideOut open={createOpen} onClose={() => setCreateOpen(false)} title="New sequence" description="Give the sequence a name, or start from a sequence template â€” the steps are copied automatically.">
       <form className="slideout-form" onSubmit={create}>
         <label>Name<input value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
         <label>Description<input value={description} onChange={e => setDescription(e.target.value)} maxLength={500} placeholder="Optional" /></label>
         <label>Category<select value={category} onChange={e => setCategory(e.target.value)}><option value="sales">Sales</option><option value="marketing">Marketing</option></select></label>
         <label>Start from sequence template<select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)}><option value="">Empty sequence</option>{sequenceTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
-        <div className="slideout-actions"><button className="secondary-button" type="button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button" disabled={saving || !orgId || !name.trim()}>{saving ? 'Saving…' : 'Create sequence'}</button></div>
+        <div className="slideout-actions"><button className="secondary-button" type="button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button" disabled={saving || !orgId || !name.trim()}>{saving ? 'Savingâ€¦' : 'Create sequence'}</button></div>
       </form>
     </SlideOut>
 
@@ -509,7 +526,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
             <label>Status<select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })} disabled={!canWrite}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option></select></label>
             <label>Daily limit<input inputMode="numeric" value={draft.dailyLimit} onChange={e => setDraft({ ...draft, dailyLimit: e.target.value })} placeholder="No limit" disabled={!canWrite} /></label>
             <label className="span-2">Sender mailbox<select value={draft.senderMailboxId} onChange={e => setDraft({ ...draft, senderMailboxId: e.target.value })} disabled={!canWrite}><option value="">Select a mailbox</option>{mailboxes.map(mb => <option key={mb.id} value={mb.id}>{mb.display_name ? `${mb.display_name} <${mb.email_address}>` : mb.email_address}</option>)}</select></label>
-            {canWrite && <div className="form-actions span-2"><button className="primary-button" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button></div>}
+            {canWrite && <div className="form-actions span-2"><button className="primary-button" disabled={saving}>{saving ? 'Savingâ€¦' : 'Save changes'}</button></div>}
           </form>
         </section>
 
@@ -520,7 +537,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
             <span className="step-index">{index + 1}</span>
             <div className="step-body">
               <b>{step.kind === 'email' ? 'Send email' : step.kind === 'wait' ? 'Wait' : step.kind === 'task' ? 'Create task' : 'Condition'}</b>
-              <span>{step.delay_minutes === 0 ? 'Immediately' : `After ${Math.round(step.delay_minutes / 1440)} day(s)`}{step.business_days_only ? ', business days' : ''} · {step.time_zone_policy} time zone · {templateName(step.template_id)}</span>
+              <span>{step.delay_minutes === 0 ? 'Immediately' : `After ${Math.round(step.delay_minutes / 1440)} day(s)`}{step.business_days_only ? ', business days' : ''} Â· {step.time_zone_policy} time zone Â· {templateName(step.template_id)}</span>
             </div>
             {step.template_id && <button className="secondary-button" type="button" onClick={() => setPreviewStepId(step.id)}><Mail size={14} /> Preview</button>}
             {canWrite && selected.status === 'draft' && <button className="icon-only" type="button" aria-label="Delete step" disabled={saving} onClick={() => void removeStep(step)}><Trash2 size={15} /></button>}
@@ -531,13 +548,14 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
             <label>Template<select value={stepTemplateId} onChange={e => setStepTemplateId(e.target.value)}><option value="">No template</option>{templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
             <label>Time zone<select value={stepTimeZonePolicy} onChange={e => setStepTimeZonePolicy(e.target.value)}><option value="contact">Contact</option><option value="workspace">Workspace</option><option value="utc">UTC</option></select></label>
             <label className="checkbox-label"><input type="checkbox" checked={stepBusinessDays} onChange={e => setStepBusinessDays(e.target.checked)} /> Business days only</label>
-            <button className="primary-button" type="button" disabled={saving} onClick={() => void addStep()}>{saving ? 'Adding…' : 'Add step'}</button>
+            <button className="primary-button" type="button" disabled={saving} onClick={() => void addStep()}>{saving ? 'Addingâ€¦' : 'Add step'}</button>
           </div></SlideOut>
         </section>
 
         <section className="record-card">
           <div className="record-card-head"><h3>Enrollments</h3>{canWrite && selected.status === 'active' && <button className="primary-button" type="button" onClick={() => { setEnrollOpen(true); setEnrollError(''); setEnrollInfo('') }}><Plus size={15} /> Enroll contacts</button>}</div>
           {sendNotice && <p className="success-message" role="status">{sendNotice}</p>}
+    {dispatchNotice && <p className="success-message" role="status">{dispatchNotice}</p>}
           <div className="stat-tiles">
             <div className="stat-tile"><span>Active</span><b>{enrollmentSummary.active}</b></div>
             <div className="stat-tile"><span>Replied</span><b>{enrollmentSummary.replied}</b></div>
@@ -552,11 +570,11 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
               const contact = enrollment.contacts
               const contactName = contact ? `${contact.first_name} ${contact.last_name}`.trim() : 'Unknown'
               return <tr key={enrollment.id}>
-                <td><b>{contactName}</b><br /><small>{contact?.email ?? '—'}</small></td>
+                <td><b>{contactName}</b><br /><small>{contact?.email ?? 'â€”'}</small></td>
                 <td><span className={stateClass(enrollment.state)}>{enrollment.state.replace('_', ' ')}</span></td>
                 <td>{new Date(enrollment.enrolled_at).toLocaleString()}</td>
-                <td>{enrollment.next_run_at ? new Date(enrollment.next_run_at).toLocaleString() : '—'}</td>
-                <td>{enrollment.stop_reason ?? '—'}</td>
+                <td>{enrollment.next_run_at ? new Date(enrollment.next_run_at).toLocaleString() : 'â€”'}</td>
+                <td>{enrollment.stop_reason ?? 'â€”'}</td>
                 <td className="row-actions">
                   {canWrite && enrollment.state === 'active' && <button className="icon-only" title="Pause enrollment" aria-label="Pause enrollment" onClick={() => void enrollmentAction(enrollment, 'pause')}><Pause size={15} /></button>}
                   {canWrite && enrollment.state === 'paused' && <button className="icon-only" title="Resume enrollment" aria-label="Resume enrollment" onClick={() => void enrollmentAction(enrollment, 'resume')}><Play size={15} /></button>}
@@ -577,7 +595,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     <CenterDialog open={enrollOpen && canWrite && !!selected} onClose={() => setEnrollOpen(false)} title="Enroll contacts" description={`Each person follows their own timeline. Contacts already enrolled in this sequence are shown disabled.`}>
       <div className="slideout-form enroll-modal">
         <div className="contact-filters">
-          <label className="search-label"><Search size={14} aria-hidden="true" /><input type="search" value={enrollSearch} onChange={e => setEnrollSearch(e.target.value)} placeholder="Search name, email, job title, company…" /></label>
+          <label className="search-label"><Search size={14} aria-hidden="true" /><input type="search" value={enrollSearch} onChange={e => setEnrollSearch(e.target.value)} placeholder="Search name, email, job title, companyâ€¦" /></label>
           <select value={enrollCompany} onChange={e => setEnrollCompany(e.target.value)}><option value="">All companies</option>{enrollCompanies.map(name => <option key={name} value={name}>{name}</option>)}</select>
           <select value={enrollLifecycle} onChange={e => setEnrollLifecycle(e.target.value)}><option value="">All lifecycles</option>{enrollLifecycles.map(value => <option key={value} value={value}>{value}</option>)}</select>
         </div>
@@ -593,21 +611,21 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
           <tbody>
             {filteredContacts.length === 0 ? <tr><td colSpan={6}>No matching contacts.</td></tr> : filteredContacts.map(contact => {
               const enrolled = enrolledContactIds.has(contact.id)
-              const companyName = contact.companies?.name ?? '—'
+              const companyName = contact.companies?.name ?? 'â€”'
               return <tr key={contact.id} className={enrolled ? 'row-enrolled' : ''} aria-disabled={enrolled}>
                 <td><input type="checkbox" aria-label={`Enroll ${contact.first_name}`} disabled={enrolled} checked={!!enrollSelected[contact.id]} onChange={e => setEnrollSelected(current => ({ ...current, [contact.id]: e.target.checked }))} /></td>
                 <td><b>{contact.first_name} {contact.last_name}</b></td>
-                <td>{contact.email ?? '—'}</td>
+                <td>{contact.email ?? 'â€”'}</td>
                 <td>{companyName}</td>
-                <td>{contact.job_title ?? '—'}</td>
-                <td>{enrolled ? <span className="status-chip status-chip-paused">Enrolled · disabled</span> : <span className="status-chip">{contact.lifecycle}</span>}</td>
+                <td>{contact.job_title ?? 'â€”'}</td>
+                <td>{enrolled ? <span className="status-chip status-chip-paused">Enrolled Â· disabled</span> : <span className="status-chip">{contact.lifecycle}</span>}</td>
               </tr>
             })}
           </tbody>
         </table></div>
         <div className="slideout-actions">
           <button className="secondary-button" type="button" onClick={() => setEnrollOpen(false)}>Cancel</button>
-          <button className="primary-button" type="button" disabled={saving} onClick={() => void bulkEnroll()}>{saving ? 'Enrolling…' : `Enroll selected (${Object.values(enrollSelected).filter(Boolean).length})`}</button>
+          <button className="primary-button" type="button" disabled={saving} onClick={() => void bulkEnroll()}>{saving ? 'Enrollingâ€¦' : `Enroll selected (${Object.values(enrollSelected).filter(Boolean).length})`}</button>
         </div>
       </div>
     </CenterDialog>

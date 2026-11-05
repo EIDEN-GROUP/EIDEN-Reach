@@ -20,7 +20,8 @@ type Identity = { id: string; email?: string }
 type Membership = { role: 'super_admin' | 'sales_manager' | 'sales_representative' | 'analyst' }
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const rolesAllowed = new Set(['super_admin', 'sales_manager', 'sales_representative'])
-const encoder = new TextEncoder()
+function nowSql() { return new Date().toISOString() }
+function getBase(env: Env): string { return (env.SUPABASE_URL || '').replace(/\/$/, '') }
 
 function response(body: unknown, status: number, origin: string | null, env: Env) {
   const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
@@ -133,7 +134,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       return response({ mailboxes: await result.json() }, 200, origin, env)
     }
 
-    if (request.method !== 'POST' || !['/mailboxes/test', '/mailboxes', '/mailboxes/sync', '/mailboxes/test-send', '/sequences/send'].includes(url.pathname)) {
+    if (request.method !== 'POST' || !['/mailboxes/test', '/mailboxes', '/mailboxes/sync', '/mailboxes/test-send', '/sequences/send', '/sequences/dispatch-due'].includes(url.pathname)) {
       return response({ error: 'Not found.' }, 404, origin, env)
     }
     if (url.pathname === '/sequences/send') {
@@ -148,6 +149,43 @@ async function handle(request: Request, env: Env): Promise<Response> {
       const result = await sendSequenceStep(env, { organizationId: body.organizationId, enrollmentId: body.enrollmentId, actorId: identity.id })
       if (!result.ok) return response({ error: result.error, code: result.code }, result.status, origin, env)
       return response({ ok: true, enrollmentId: result.enrollmentId, contactEmail: result.contactEmail, stepPosition: result.stepPosition, unsubscribeUrl: result.unsubscribeUrl }, 200, origin, env)
+    }
+
+    if (url.pathname === '/sequences/dispatch-due') {
+      const rawText = await request.text()
+      let value: unknown = {}
+      if (rawText.trim()) try { value = JSON.parse(rawText) } catch { value = {} }
+      const body = value as { organizationId?: unknown; limit?: number }
+      if (typeof body.organizationId !== 'string' || !uuidPattern.test(body.organizationId)) return response({ error: 'A valid workspace is required.' }, 400, origin, env)
+      const membership = await getMembership(env, body.organizationId, identity.id)
+      if (!membership || !rolesAllowed.has(membership.role)) return response({ error: 'You do not have permission to dispatch sequence email in this workspace.' }, 403, origin, env)
+
+      const suppressed = await (async () => {
+        return 0
+      })()
+      void suppressed
+
+      // Claim up to N due enrollments
+      const cap = Math.max(1, Math.min(5, typeof body.limit === 'number' ? body.limit : 5))
+      const dueUrl = new URL(`${getBase(env)}/rest/v1/sequence_enrollments`)
+      dueUrl.searchParams.set('select', 'id,next_run_at,state,sequence_id')
+      dueUrl.searchParams.set('organization_id', `eq.${body.organizationId}`)
+      dueUrl.searchParams.set('state', 'in.(active,pending)')
+      dueUrl.searchParams.set('next_run_at', `lte.${nowSql()}`)
+      dueUrl.searchParams.set('order', 'next_run_at.asc')
+      dueUrl.searchParams.set('limit', String(cap))
+      const dueRes = await fetch(dueUrl, { headers: serviceHeaders(env) })
+      const due = dueRes.ok ? (await dueRes.json() as Array<{ id: string }>) : []
+      let succeeded = 0, retried = 0, failed = 0, results: Array<{ id: string; ok: boolean; error?: string }> = []
+      for (const item of due) {
+        const result = await sendSequenceStep(env, { organizationId: body.organizationId, enrollmentId: item.id, actorId: identity.id })
+        if (result.ok) { succeeded += 1 }
+        else if (result.code === 'suppressed' || result.code === 'no_due_step' || result.code === 'not_active' || result.code === 'no_template') {
+          retried += 1
+        } else { failed += 1 }
+        results.push({ id: item.id, ok: result.ok, error: result.ok ? undefined : `${result.error}${result.code ? ' (' + result.code + ')' : ''}` })
+      }
+      return response({ ok: true, claimed: due.length, succeeded, retried, failed, results, dispatched_at: nowSql() }, 200, origin, env)
     }
     if (url.pathname === '/mailboxes/sync') {
       const rawText = await request.text()
