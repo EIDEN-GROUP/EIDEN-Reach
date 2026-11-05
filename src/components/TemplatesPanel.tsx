@@ -28,6 +28,7 @@ const defaultDraft = { name: '', subject: '', textBody: '', htmlBody: '', catego
 export function TemplatesPanel({ userId, canWrite }: { userId: string; canWrite: boolean }) {
   const [orgId, setOrgId] = useState('')
   const [templates, setTemplates] = useState<Template[]>([])
+  const [industries, setIndustries] = useState<string[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState(defaultDraft)
   const [loading, setLoading] = useState(true)
@@ -46,6 +47,7 @@ export function TemplatesPanel({ userId, canWrite }: { userId: string; canWrite:
       if (!active) return
       if (membership.error || !membership.data) { setError('Your account is not assigned to a workspace.'); setLoading(false); return }
       setOrgId(membership.data.organization_id)
+      const iRes = await supabase!.from('industry_categories').select('name').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name'); if (!iRes.error && iRes.data) setIndustries(iRes.data.map((r: { name: string }) => r.name))
       const result = await supabase!.from('email_templates').select('id,name,subject,text_body,html_body,category').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name')
       if (!active) return
       if (result.error) setError('Templates could not be loaded.')
@@ -149,7 +151,7 @@ export function TemplatesPanel({ userId, canWrite }: { userId: string; canWrite:
         <form className="contact-form template-form" onSubmit={save}>
           <div className="template-grid">
             <label>Name<input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} required maxLength={200} /></label>
-            <label>Industry (group)<select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}><option value="sales">sales</option><option value="marketing">marketing</option><option value="transactional">transactional</option></select></label>
+            <label>Industry (group)<select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}><option value="">No industry</option>{industries.map(ic => <option key={ic} value={ic}>{ic}</option>)}</select></label>
           </div>
           <label>Subject<input value={draft.subject} onChange={e => setDraft({ ...draft, subject: e.target.value })} maxLength={300} placeholder="Welcome to {{company}}" /></label>
           <div className="merge-tag-row" aria-label="Personalization tags">

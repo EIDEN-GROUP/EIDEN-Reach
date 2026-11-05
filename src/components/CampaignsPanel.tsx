@@ -14,6 +14,7 @@ export function CampaignsPanel({ userId, canWrite }: { userId: string; canWrite:
   const [selectedId, setSelectedId] = useState('')
   const [name, setName] = useState('')
   const [category, setCategory] = useState('sales')
+  const [industries, setIndustries] = useState<string[]>([])
   const [senderMailboxId, setSenderMailboxId] = useState('')
   const [sequenceId, setSequenceId] = useState('')
   const [draft, setDraft] = useState({ name: '', category: 'sales', status: 'draft', senderMailboxId: '', sequenceId: '' })
@@ -28,6 +29,7 @@ export function CampaignsPanel({ userId, canWrite }: { userId: string; canWrite:
       if (!active) return
       if (membership.error || !membership.data) { setError('Your account is not assigned to a workspace.'); setLoading(false); return }
       setOrgId(membership.data.organization_id)
+      void (async () => { const iRes = await supabase!.from('industry_categories').select('name').eq('organization_id', membership.data!.organization_id).is('archived_at', null).order('name'); if (!iRes.error && iRes.data) setIndustries(iRes.data.map((r: { name: string }) => r.name)) })()
       const [campRes, mbRes, seqRes] = await Promise.all([
         supabase!.from('campaigns').select('id,name,category,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').eq('organization_id', membership.data.organization_id).is('archived_at', null).order('name'),
         supabase!.from('mailbox_accounts').select('id,email_address,connection_state').eq('organization_id', membership.data.organization_id).is('disconnected_at', null).order('email_address'),
@@ -85,17 +87,17 @@ export function CampaignsPanel({ userId, canWrite }: { userId: string; canWrite:
     {error && <p className="inline-error" role="alert">{error}</p>}
     {canWrite && <form className="contact-form" onSubmit={create}>
       <label>Name<input value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
-      <label>Industry (group)<select value={category} onChange={e => setCategory(e.target.value)}><option value="sales">sales</option><option value="marketing">marketing</option><option value="transactional">transactional</option></select></label>
+      <label>Industry<select value={category} onChange={e => setCategory(e.target.value)}><option value="">No industry</option>{industries.map(ic => <option key={ic} value={ic}>{ic}</option>)}</select></label>
       <label>Sender mailbox<select value={senderMailboxId} onChange={e => setSenderMailboxId(e.target.value)}><option value="">None</option>{mailboxes.map(m => <option key={m.id} value={m.id}>{m.email_address}</option>)}</select></label>
       <label>Sequence<select value={sequenceId} onChange={e => setSequenceId(e.target.value)}><option value="">None</option>{sequences.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
       <button className="primary-button" disabled={saving || !orgId}>{saving ? 'Saving...' : 'Create campaign'}</button>
     </form>}
-    {loading ? <div className="table-message">Loading campaigns...</div> : campaigns.length ? <div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>Name</th><th>Industry group</th><th>Status</th><th>Action</th></tr></thead><tbody>{campaigns.map(c => <tr key={c.id}><td><button className="text-action" onClick={() => select(c)}>{c.name}</button></td><td>{c.category}</td><td>{c.status}</td><td>{canWrite && <button className="archive-button" type="button" onClick={() => void archive(c)}>Archive</button>}</td></tr>)}</tbody></table></div> : !error && <div className="table-message">No campaigns yet. {canWrite ? 'Create one above.' : 'No campaigns are available.'}</div>}
+    {loading ? <div className="table-message">Loading campaigns...</div> : campaigns.length ? <div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>Name</th><th>Industry</th><th>Status</th><th>Action</th></tr></thead><tbody>{campaigns.map(c => <tr key={c.id}><td><button className="text-action" onClick={() => select(c)}>{c.name}</button></td><td>{c.category}</td><td>{c.status}</td><td>{canWrite && <button className="archive-button" type="button" onClick={() => void archive(c)}>Archive</button>}</td></tr>)}</tbody></table></div> : !error && <div className="table-message">No campaigns yet. {canWrite ? 'Create one above.' : 'No campaigns are available.'}</div>}
     {selected && <section className="contact-editor" aria-label="Campaign details">
       <div className="editor-heading"><div><h3>{selected.name}</h3><p>Campaign · {selected.status}</p></div><button className="secondary-button" type="button" onClick={() => setSelectedId('')}>Close</button></div>
       {canWrite ? <form className="contact-form" onSubmit={update}>
         <label>Name<input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} required maxLength={200} /></label>
-        <label>Industry (group)<select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}><option value="sales">sales</option><option value="marketing">marketing</option><option value="transactional">transactional</option></select></label>
+        <label>Industry<select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}><option value="">No industry</option>{industries.map(ic => <option key={ic} value={ic}>{ic}</option>)}</select></label>
         <label>Status<select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })}><option value="draft">draft</option><option value="preflight">preflight</option><option value="paused">paused</option><option value="cancelled">cancelled</option><option value="approved" disabled>approved (managed)</option><option value="scheduled" disabled>scheduled (managed)</option><option value="sending" disabled>sending (worker)</option><option value="completed" disabled>completed (worker)</option></select></label>
         <label>Sender mailbox<select value={draft.senderMailboxId} onChange={e => setDraft({ ...draft, senderMailboxId: e.target.value })}><option value="">None</option>{mailboxes.map(m => <option key={m.id} value={m.id}>{m.email_address}</option>)}</select></label>
         <label>Sequence<select value={draft.sequenceId} onChange={e => setDraft({ ...draft, sequenceId: e.target.value })}><option value="">None</option>{sequences.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
