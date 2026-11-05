@@ -27,6 +27,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   const [sequences, setSequences] = useState<Sequence[]>([])
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
   const [sequenceTemplates, setSequenceTemplates] = useState<SequenceTemplateListItem[]>([])
+  const [industries, setIndustries] = useState<string[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [steps, setSteps] = useState<Step[]>([])
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
@@ -71,6 +72,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       if (membership.error || !membership.data) { setError('Your account is not assigned to a workspace.'); setLoading(false); return }
       const organizationId = membership.data.organization_id
       setOrgId(organizationId)
+      void (async () => { const iRes = await supabase!.from('industry_categories').select('name').eq('organization_id', organizationId).is('archived_at', null).order('name'); if (!iRes.error && iRes.data) setIndustries(iRes.data.map((r: { name: string }) => r.name)) })()
       const [seqRes, tplRes, seqTplRes] = await Promise.all([
         supabase!.from('sequences').select(SEQUENCE_COLUMNS).eq('organization_id', organizationId).is('archived_at', null).order('name'),
         supabase!.from('email_templates').select('id,name,subject,html_body,text_body').eq('organization_id', organizationId).is('archived_at', null).order('name'),
@@ -510,7 +512,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       <form className="slideout-form" onSubmit={create}>
         <label>Name<input value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
         <label>Description<input value={description} onChange={e => setDescription(e.target.value)} maxLength={500} placeholder="Optional" /></label>
-        <label>Industry (group)<select value={category} onChange={e => setCategory(e.target.value)}><option value="sales">Sales</option><option value="marketing">Marketing</option></select></label>
+        <label>Industry<select value={category} onChange={e => setCategory(e.target.value)}><option value="">No industry</option>{industries.map(ic => (<option key={ic} value={ic}>{ic}</option>))}</select></label>
         <label><span className="input-label">Language</span><Typeahead value={language} setValue={v => setLanguage(v)} options={LANGUAGES} placeholder="en" /></label>
         <label><span className="input-label">City</span><Typeahead value={city} setValue={v => setCity(v)} options={CITIES} placeholder="Austin" /></label>
         <label><span className="input-label">Country</span><Typeahead value={country} setValue={v => setCountry(v)} options={COUNTRIES} placeholder="United States" /></label>
