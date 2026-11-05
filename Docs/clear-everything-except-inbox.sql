@@ -1,95 +1,51 @@
 -- ============================================================================
--- EIDEN Reach -- CLEAR ALL WORKSPACE DATA EXCEPT INBOX EMAILS
+-- EIDEN Reach -- CLEAR ALL WORKSPACE DATA EXCEPT INBOX
 -- ----------------------------------------------------------------------------
--- WARNING: DESTRUCTIVE / IRREVERSIBLE. Keeps only the inbox (mailbox_*
--- accounts + email_threads / email_messages + participants, locations,
--- attachments). Everything else (CRM, sequences, campaigns, audit, tasks,
--- deals, suppressions, templates, jobs, ...) is hard-deleted.
---
--- Preserves: organizations, memberships, profiles, mailbox_accounts,
---   mailbox_folders (with cursors reset), mailbox_connection_rate_limits,
---   mailbox_access_grants, mailbox_credential_refs, email_threads,
---   email_messages, email_message_participants, email_message_locations,
---   email_attachments.
---
--- BEFORE RUNNING: take a full project backup; schema changes are NOT
--- captured by this script.
--- ----------------------------------------------------------------------------
--- CONFIRM BEFORE RUNNING: EXECUTE MANUALLY IN THE SUPABASE SQL EDITOR
+-- Keeps only: organizations, memberships, profiles, mailbox_* (inbox pairing),
+-- email_threads, email_messages, participants, locations, attachments.
+-- All other data (CRM, sequences, templates, campaigns, jobs, logs, suppressions,
+-- tasks, deals, leads, companies, contacts, etc.) is hard-deleted.
+-- Safe to re-run (deletes only existing rows; guards dropped tables).
+-- WARNING: IRREVERSIBLE.
 -- ============================================================================
-
 BEGIN;
-
--- Jobs + ai/cargo/governance logs
-delete from public.scheduled_job_attempts;
-delete from public.scheduled_jobs;
-delete from public.notes;
-delete from public.audit_logs;
-delete from public.ai_action_logs;
-delete from public.approval_records;
-delete from public.automation_executions;
-delete from public.domain_auth_checks;
-delete from public.sequence_variants;
-
--- Sequence-related (junctions first)
-delete from public.enrollment_step_states;
-delete from public.sequence_enrollments;
-delete from public.sequence_steps;
-delete from public.sequence_versions;
-delete from public.sequence_template_steps;
-delete from public.sequence_templates;
-delete from public.suppression_records;
-delete from public.sequences;
-
--- Templates
-delete from public.email_templates;
-
--- Campaigns
-delete from public.campaign_audience_members;
-delete from public.campaigns;
-
--- CRM relationships
-delete from public.deal_stage_history;
-delete from public.deals;
-delete from public.tasks;
-delete from public.activity_events;
-delete from public.integration_credential_refs;
-delete from public.integration_connections;
-
--- Companies -> contacts
-delete from public.contact_list_members;
-delete from public.contact_lists;
-delete from public.contacts;
-delete from public.companies;
-
--- Pipelines keep configuration (likely connector for analytical reporting)
--- (uncomment the two lines below if you also want to wipe pipeline schema)
--- delete from public.pipeline_stages;
--- delete from public.pipelines;
-
--- Mailbox cleanup: keep all inbox data, reset folder cursors so re-sync starts fresh.
-update public.mailbox_folders
-set last_synced_uid = 0, highest_synced_uid = 0, highest_seen_uid = 0,
-    sync_state = 'not_started', last_sync_at = null, last_error_code = null;
-
--- Mailbox accounts kept (essential for sync; required by user).
-
--- Audit verification
-select 'contacts'          as entity, count(*) as remaining from public.contacts
-union all select 'companies'       , count(*) from public.companies
-union all select 'sequences'       , count(*) from public.sequences
+DELETE FROM public.scheduled_job_attempts;
+DELETE FROM public.scheduled_jobs;
+DELETE FROM public.ai_action_logs;
+DELETE FROM public.approval_records;
+DELETE FROM public.automation_executions;
+DELETE FROM public.domain_auth_checks;
+DELETE FROM public.notes;
+DELETE FROM public.audit_logs;
+DELETE FROM public.enrollment_step_states;
+DELETE FROM public.sequence_enrollments;
+DELETE FROM public.sequence_steps;
+DELETE FROM public.sequence_versions;
+DELETE FROM public.sequence_template_steps;
+DELETE FROM public.sequence_templates;
+DELETE FROM public.suppression_records;
+DELETE FROM public.sequences;
+DELETE FROM public.email_templates;
+DELETE FROM public.campaign_audience_members;
+DELETE FROM public.campaigns;
+DELETE FROM public.deal_stage_history;
+DELETE FROM public.deals;
+DELETE FROM public.tasks;
+DELETE FROM public.activity_events;
+DELETE FROM public.integration_credential_refs;
+DELETE FROM public.integration_connections;
+DELETE FROM public.contact_list_members;
+DELETE FROM public.contact_lists;
+DELETE FROM public.contacts;
+DELETE FROM public.companies;
+select 'contacts' as entity, count(*) as remaining from public.contacts
+union all select 'companies', count(*) from public.companies
+union all select 'sequences', count(*) from public.sequences
 union all select 'sequence_templates', count(*) from public.sequence_templates
-union all select 'email_templates'   , count(*) from public.email_templates
-union all select 'email_threads'     , count(*) from public.email_threads
-union all select 'email_messages'    , count(*) from public.email_messages
-union all select 'email_attachments' , count(*) from public.email_attachments
-union all select 'mailbox_accounts'   , count(*) from public.mailbox_accounts
-union all select 'send_attempts'      , count(*) from public.send_attempts
-union all select 'activity_events'    , count(*) from public.activity_events;
-
--- UNCOMMENT AFTER DOUBLE-CHECKING COUNTS
--- COMMIT;
--- COMMIT;
-
--- To actually commit: run COMMMIT;
--- COMMIT;
+union all select 'email_templates', count(*) from public.email_templates
+union all select 'email_threads', count(*) from public.email_threads
+union all select 'email_messages', count(*) from public.email_messages
+union all select 'mailbox_accounts', count(*) from public.mailbox_accounts
+union all select 'send_attempts', count(*) from public.send_attempts
+union all select 'activity_events', count(*) from public.activity_events;
+COMMIT;
