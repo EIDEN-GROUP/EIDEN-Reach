@@ -484,6 +484,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       <div className="stat-tile"><span>Reply rate</span><b>{formatKpi(kpis.replyRate, '%')}</b></div>
       <div className="stat-tile"><span>Bounce rate</span><b>{formatKpi(kpis.bounceRate, '%')}</b></div>
       <div className="stat-tile"><span>Unsubscribed</span><b>{formatKpi(kpis.unsubscribed)}</b></div>
+            <div className="stat-tile"><span>Replied</span><b>{kpis ? formatKpi(kpis.replied) : "—"}</b></div>
     </div>}
 
     {loading ? <div className="table-message">Loading sequences...</div> : sequences.length ? <div className="contact-table-wrap"><table className="contact-table">
