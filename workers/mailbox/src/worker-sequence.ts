@@ -267,6 +267,43 @@ export async function sendSequenceStep(env: Env, input: { organizationId: string
     })
   } catch (error) {
     const code = error instanceof MailboxProtocolError ? error.code : 'send_failed'
+    const now = new Date().toISOString()
+    try {
+      await rest(env, 'send_attempts', {
+        method: 'POST',
+        headers: { Prefer: 'return=minimal', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id: enrollment.organization_id,
+          mailbox_account_id: account.id,
+          enrollment_id: enrollment.id,
+          sequence_step_id: step.id,
+          contact_id: contact.id,
+          idempotency_key: `seq-fail-${enrollment.id}-${step.position}-${Date.now()}`,
+          status: 'failed',
+          started_at: now,
+          finished_at: now,
+          error_code: code,
+        }),
+      })
+    } catch (persistError) { console.error('SEND_ATTEMPT_FAIL_INSERT_FAILED', persistError) }
+    try {
+      await rest(env, `sequence_enrollments?id=eq.${enrollment.id}`, {
+        method: 'PATCH',
+        headers: { Prefer: 'return=minimal', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: 'bounced', stopped_at: now, stop_reason: 'email_bounce', next_run_at: null, error_code: code }),
+      })
+      await rest(env, 'activity_events', {
+        method: 'POST',
+        headers: { Prefer: 'return=minimal', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id: enrollment.organization_id,
+          contact_id: contact.id,
+          event_type: 'sequence_email_bounced',
+          summary: `Bounced step ${step.position + 1} of sequence for ${firstName} ${lastName} (${code})`.trim(),
+          source: 'worker.sequence_send',
+        }),
+      })
+    } catch (persistError) { console.error('ENROLLMENT_BOUNCE_UPDATE_FAILED', persistError) }
     return { ok: false, status: 422, error: 'Email could not be sent.', code }
   }
 
