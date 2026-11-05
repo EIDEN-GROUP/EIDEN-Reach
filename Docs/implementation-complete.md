@@ -50,10 +50,17 @@ No destructive changes; all FKs `ON DELETE SET NULL`/`CASCADE` preserve history.
 - `npm run build` → succeeded
 - Browser (Playwright): sign in, sidebar nav (Leads & Lists gone, merged Contacts tab bar), Prospecting Add-contact modal, Sequence Templates builder save, Sequences KPI tiles + step preview, unsubscribe route returns HTML confirmation, console clean
 
-## Remaining/blockers
+## Remaining/blockers (ops-level only)
 
-- `SLACK_WEBHOOK_URL` is not set in `workers/mailbox/.dev.vars` — Slack notify no-ops silently without it.
-- Automated cron dispatch of sequence emails has not been wired (manual "Send next step now" covers the verified backend path).
+- Production worker still must set `SLACK_WEBHOOK_URL`, `DISPATCH_TOKEN`, `APP_ORIGIN`, `UNSUBSCRIBE_URL_BASE` via `wrangler` secrets/vars.
+- `workers/mailbox` must be deployed before the 15-minute cron in `wrangler.jsonc` is supported in production.
+
+## What landed in this iteration (80760bb)
+
+- `/system/dispatch-due` + `scheduled` handler now drive the cron automatically.
+- `processBounceMessage` handles delivery-status-notification bounces; `sendSequenceStep` records SMTP failures as `bounced` so Bounce rate counts.
+- Reply detection verified (`replied` flip on inbound sync).
+- Slack dispatch notifications include the deployer identity.
 
 ## Final status
 
@@ -68,4 +75,4 @@ No destructive changes; all FKs `ON DELETE SET NULL`/`CASCADE` preserve history.
 | Prospecting add-contact + CSV download + import | Complete and verified |
 | ENROL bulk modal (filters, select-all, greyed) | Complete and verified |
 | Global unsubscribe stop link ({{unsubscribe_link}}, List-Unsubscribe, auto footer) | Implemented in backend & worker, verified via /unsubscribe route |
-| Sequence execution / automated dispatch cron | Partial — manual send verified, cron dispatcher remains to install |
+| Sequence execution / automated dispatch cron | Complete (worker + UI + 15-minute Cloudflare trigger) |
