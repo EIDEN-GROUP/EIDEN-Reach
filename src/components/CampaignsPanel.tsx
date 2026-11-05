@@ -13,11 +13,11 @@ export function CampaignsPanel({ userId, canWrite }: { userId: string; canWrite:
   const [sequences, setSequences] = useState<Sequence[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [name, setName] = useState('')
-  const [category, setCategory] = useState('sales')
+  const [industry, setIndustry] = useState('')
   const [industries, setIndustries] = useState<string[]>([])
   const [senderMailboxId, setSenderMailboxId] = useState('')
   const [sequenceId, setSequenceId] = useState('')
-  const [draft, setDraft] = useState({ name: '', category: 'sales', status: 'draft', senderMailboxId: '', sequenceId: '' })
+  const [draft, setDraft] = useState({ name: '', category: 'sales', industry: '', status: 'draft', senderMailboxId: '', sequenceId: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -50,15 +50,15 @@ export function CampaignsPanel({ userId, canWrite }: { userId: string; canWrite:
     if (!canWrite || !orgId || !name.trim()) return
     setSaving(true)
     setError('')
-    const result = await supabase!.from('campaigns').insert({ organization_id: orgId, owner_id: userId, name: name.trim(), category: 'sales', industry: category, sender_mailbox_id: senderMailboxId || null, sequence_id: sequenceId || null, status: 'draft' }).select('id,name,category,industry,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').single()
+    const result = await supabase!.from('campaigns').insert({ organization_id: orgId, owner_id: userId, name: name.trim(), category: 'sales', industry: industry, sender_mailbox_id: senderMailboxId || null, sequence_id: sequenceId || null, status: 'draft' }).select('id,name,category,industry,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').single()
     if (result.error) setError('Campaign could not be created.')
-    else { setCampaigns(current => [...current, result.data as Campaign].sort((a, b) => a.name.localeCompare(b.name))); setName(''); setCategory('sales'); setSenderMailboxId(''); setSequenceId('') }
+    else { setCampaigns(current => [...current, result.data as Campaign].sort((a, b) => a.name.localeCompare(b.name))); setName(''); setIndustry(''); setSenderMailboxId(''); setSequenceId('') }
     setSaving(false)
   }
 
   function select(c: Campaign) {
     setSelectedId(c.id)
-    setDraft({ name: c.name, category: c.category, status: c.status, senderMailboxId: c.sender_mailbox_id ?? '', sequenceId: c.sequence_id ?? '' })
+    setDraft({ name: c.name, category: 'sales', industry: c.industry ?? c.category ?? '', status: c.status, senderMailboxId: c.sender_mailbox_id ?? '', sequenceId: c.sequence_id ?? '' })
   }
 
   async function update(event: FormEvent<HTMLFormElement>) {
@@ -66,7 +66,7 @@ export function CampaignsPanel({ userId, canWrite }: { userId: string; canWrite:
     if (!canWrite || !selected) return
     setSaving(true)
     setError('')
-    const result = await supabase!.from('campaigns').update({ name: draft.name.trim(), category: 'sales', industry: draft.category, status: draft.status, sender_mailbox_id: draft.senderMailboxId || null, sequence_id: draft.sequenceId || null }).eq('id', selected.id).eq('organization_id', orgId).select('id,name,category,industry,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').single()
+    const result = await supabase!.from('campaigns').update({ name: draft.name.trim(), category: 'sales', industry: draft.industry, status: draft.status, sender_mailbox_id: draft.senderMailboxId || null, sequence_id: draft.sequenceId || null }).eq('id', selected.id).eq('organization_id', orgId).select('id,name,category,industry,status,scheduled_at,sender_mailbox_id,sequence_id,archived_at').single()
     if (result.error) setError('Campaign changes could not be saved.')
     else { setCampaigns(current => current.map(c => c.id === selected.id ? result.data as Campaign : c).sort((a, b) => a.name.localeCompare(b.name))); setSelectedId(result.data.id) }
     setSaving(false)
@@ -87,17 +87,17 @@ export function CampaignsPanel({ userId, canWrite }: { userId: string; canWrite:
     {error && <p className="inline-error" role="alert">{error}</p>}
     {canWrite && <form className="contact-form" onSubmit={create}>
       <label>Name<input value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
-      <label>Industry<select value={category} onChange={e => setCategory(e.target.value)}><option value="">No industry</option>{industries.map(ic => <option key={ic} value={ic}>{ic}</option>)}</select></label>
+      <label>Industry<select value={industry} onChange={e => setIndustry(e.target.value)}><option value="">No industry</option>{industries.map(ic => <option key={ic} value={ic}>{ic}</option>)}</select></label>
       <label>Sender mailbox<select value={senderMailboxId} onChange={e => setSenderMailboxId(e.target.value)}><option value="">None</option>{mailboxes.map(m => <option key={m.id} value={m.id}>{m.email_address}</option>)}</select></label>
       <label>Sequence<select value={sequenceId} onChange={e => setSequenceId(e.target.value)}><option value="">None</option>{sequences.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
       <button className="primary-button" disabled={saving || !orgId}>{saving ? 'Saving...' : 'Create campaign'}</button>
     </form>}
-    {loading ? <div className="table-message">Loading campaigns...</div> : campaigns.length ? <div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>Name</th><th>Industry</th><th>Status</th><th>Action</th></tr></thead><tbody>{campaigns.map(c => <tr key={c.id}><td><button className="text-action" onClick={() => select(c)}>{c.name}</button></td><td>{c.category}</td><td>{c.status}</td><td>{canWrite && <button className="archive-button" type="button" onClick={() => void archive(c)}>Archive</button>}</td></tr>)}</tbody></table></div> : !error && <div className="table-message">No campaigns yet. {canWrite ? 'Create one above.' : 'No campaigns are available.'}</div>}
+    {loading ? <div className="table-message">Loading campaigns...</div> : campaigns.length ? <div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>Name</th><th>Industry</th><th>Status</th><th>Action</th></tr></thead><tbody>{campaigns.map(c => <tr key={c.id}><td><button className="text-action" onClick={() => select(c)}>{c.name}</button></td><td>{c.category === 'sales' || c.category === 'marketing' ? (c.industry || '—') : c.category}</td><td>{c.status}</td><td>{canWrite && <button className="archive-button" type="button" onClick={() => void archive(c)}>Archive</button>}</td></tr>)}</tbody></table></div> : !error && <div className="table-message">No campaigns yet. {canWrite ? 'Create one above.' : 'No campaigns are available.'}</div>}
     {selected && <section className="contact-editor" aria-label="Campaign details">
       <div className="editor-heading"><div><h3>{selected.name}</h3><p>Campaign · {selected.status}</p></div><button className="secondary-button" type="button" onClick={() => setSelectedId('')}>Close</button></div>
       {canWrite ? <form className="contact-form" onSubmit={update}>
         <label>Name<input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} required maxLength={200} /></label>
-        <label>Industry<select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}><option value="">No industry</option>{industries.map(ic => <option key={ic} value={ic}>{ic}</option>)}</select></label>
+        <label>Industry<select value={draft.industry} onChange={e => setDraft({ ...draft, industry: e.target.value })}><option value="">No industry</option>{industries.map(ic => <option key={ic} value={ic}>{ic}</option>)}</select></label>
         <label>Status<select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })}><option value="draft">draft</option><option value="preflight">preflight</option><option value="paused">paused</option><option value="cancelled">cancelled</option><option value="approved" disabled>approved (managed)</option><option value="scheduled" disabled>scheduled (managed)</option><option value="sending" disabled>sending (worker)</option><option value="completed" disabled>completed (worker)</option></select></label>
         <label>Sender mailbox<select value={draft.senderMailboxId} onChange={e => setDraft({ ...draft, senderMailboxId: e.target.value })}><option value="">None</option>{mailboxes.map(m => <option key={m.id} value={m.id}>{m.email_address}</option>)}</select></label>
         <label>Sequence<select value={draft.sequenceId} onChange={e => setDraft({ ...draft, sequenceId: e.target.value })}><option value="">None</option>{sequences.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
