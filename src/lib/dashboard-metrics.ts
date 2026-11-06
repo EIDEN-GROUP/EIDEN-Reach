@@ -80,7 +80,7 @@ export function calculateSequenceKpis(input: {
     emailsCompleted,
     emailsFailed,
     replyRate: pct(replied, contacted),
-    positiveReplyRate: pct(count(['interested']), contacted),
+    positiveReplyRate: pct(count(['interested', 'replied']), contacted),
     bounceRate: pct(bounced, sentCount || contacted),
     completionRate: pct(completed, enrollments.length),
     failureRate: pct(emailsFailed, emailsCompleted + emailsFailed || sentCount),

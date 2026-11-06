@@ -74,7 +74,7 @@ export function OverviewPanel({ userId }: { userId: string }) {
         .eq('is_default', true)
         .maybeSingle()
 
-      const [contactResult, companyResult, sequenceResult, dealResult, taskResult, stageResult, enrollmentResult, activityResult, suppressionResult] = await Promise.all([
+      const [contactResult, companyResult, sequenceResult, dealResult, taskResult, stageResult, enrollmentResult, activityResult, sendAttemptsResult, suppressionResult] = await Promise.all([
         supabase!.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId).is('archived_at', null),
         supabase!.from('companies').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId).is('archived_at', null),
         supabase!.from('sequences').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId).eq('status', 'active').is('archived_at', null),
@@ -85,16 +85,15 @@ export function OverviewPanel({ userId }: { userId: string }) {
           : Promise.resolve({ data: [] as Stage[], error: null }),
         supabase!.from('sequence_enrollments').select('state,stop_reason,next_step_position').eq('organization_id', organizationId).limit(2001),
         supabase!.from('activity_events').select('event_type', { count: 'exact' }).eq('organization_id', organizationId).ilike('event_type', '%sent%').limit(1),
+        supabase!.from('send_attempts').select('status').eq('organization_id', organizationId).limit(2000),
         supabase!.from('suppression_records').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId),
       ])
 
       let stepStates: Array<{ state: string }> = []
-      if (enrollmentResult.data?.length) {
-        const ids = (enrollmentResult.data as Array<{ id?: string }>).map(e => e.id).filter(Boolean) as string[]
-        if (ids.length) {
-          const ss = await supabase!.from('enrollment_step_states').select('state').in('enrollment_id', ids).limit(501)
-          if (!ss.error && ss.data) stepStates = ss.data as Array<{ state: string }>
-        }
+      if (!sendAttemptsResult.error && sendAttemptsResult.data) {
+        stepStates = (sendAttemptsResult.data as Array<{ status: string }>).map(row => ({
+          state: row.status === 'failed' ? 'failed' : row.status === 'accepted' ? 'completed' : row.status,
+        }))
       }
 
       if (!active) return

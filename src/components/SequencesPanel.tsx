@@ -149,8 +149,10 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       const stepIds = (stepRes.data ?? []).map(s => (s as { id: string }).id)
       let stepStates: Array<{ state: string }> = []
       if (stepIds.length) {
-        const ss = await supabase!.from('enrollment_step_states').select('state').in('sequence_step_id', stepIds).limit(1000)
-        stepStates = (ss.data ?? []) as Array<{ state: string }>
+        const ss = await supabase!.from('send_attempts').select('status').in('sequence_step_id', stepIds).limit(1000)
+        stepStates = (ss.data ?? []).map((row: { status: string }) => ({
+          state: row.status === 'failed' ? 'failed' : row.status === 'accepted' ? 'completed' : row.status,
+        }))
       }
       const enrollmentsData = (enrRes.data ?? []) as Array<{ state: string; stop_reason?: string | null; next_step_position?: number }>
       setKpis(calculateSequenceKpis({ enrollments: enrollmentsData, stepStates, sentCount: actRes.count ?? 0 }))

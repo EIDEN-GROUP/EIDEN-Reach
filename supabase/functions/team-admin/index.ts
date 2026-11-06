@@ -7,10 +7,12 @@ const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 const appOrigin = Deno.env.get('APP_ORIGIN')
 
 const jsonHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
+const ALLOWED_ORIGINS = (appOrigin ? appOrigin.split(',').map(x => x.trim()) : []).concat(['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:4173']).filter(Boolean)
+function isAllowed(origin: string | null) { return !!origin && ALLOWED_ORIGINS.includes(origin) }
 
 function respond(body: unknown, status: number, origin: string | null) {
   const headers = new Headers(jsonHeaders)
-  if (origin && origin === appOrigin) {
+  if (isAllowed(origin)) {
     headers.set('Access-Control-Allow-Origin', origin)
     headers.set('Vary', 'Origin')
     headers.set('Access-Control-Allow-Headers', 'authorization, apikey, content-type, x-client-info')
@@ -21,11 +23,12 @@ function respond(body: unknown, status: number, origin: string | null) {
 
 Deno.serve(async request => {
   const origin = request.headers.get('origin')
-  if (origin && appOrigin && origin !== appOrigin) return respond({ error: 'Origin is not allowed.' }, 403, null)
+  if (origin && !isAllowed(origin)) return respond({ error: 'Origin is not allowed.' }, 403, null)
   if (request.method === 'OPTIONS') return respond(null, 204, origin)
   if (request.method !== 'POST') return respond({ error: 'Method not allowed.' }, 405, origin)
   if (!supabaseUrl || !anonKey || !serviceRoleKey) return respond({ error: 'Team administration is not configured on the server.' }, 503, origin)
-  if (origin && !appOrigin) return respond({ error: 'The application origin is not configured on the server.' }, 503, null)
+  if (origin && !isAllowed(origin)) return respond({ error: 'Origin is not allowed.' }, 403, null)
+  if (origin && ALLOWED_ORIGINS.length === 0) return respond({ error: 'No allowed application origins are configured.' }, 503, null)
 
   const authorization = request.headers.get('authorization')
   if (!authorization?.startsWith('Bearer ')) return respond({ error: 'Sign in to manage workspace access.' }, 401, origin)

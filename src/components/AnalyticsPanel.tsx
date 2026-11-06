@@ -30,7 +30,7 @@ export function AnalyticsPanel({ userId }: { userId: string }) {
       const orgId = membership.data.organization_id
       const pipe = await supabase!.from('pipelines').select('id').eq('organization_id', orgId).eq('is_default', true).maybeSingle()
 
-      const [contactRes, companyRes, taskRes, dealRes, stageRes, activityRes, enrollRes, sentRes, suppRes] = await Promise.all([
+      const [contactRes, companyRes, taskRes, dealRes, stageRes, activityRes, enrollRes, sentRes, sendAttemptsRes, suppRes] = await Promise.all([
         supabase!.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).is('archived_at', null),
         supabase!.from('companies').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).is('archived_at', null),
         supabase!.from('tasks').select('id,status,due_at').eq('organization_id', orgId),
@@ -39,16 +39,17 @@ export function AnalyticsPanel({ userId }: { userId: string }) {
         supabase!.from('activity_events').select('id', { count: 'exact', head: true }).eq('organization_id', orgId),
         supabase!.from('sequence_enrollments').select('state,stop_reason,next_step_position,enrolled_at,contact_id').eq('organization_id', orgId).limit(2001),
         supabase!.from('activity_events').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).ilike('event_type', '%sent%'),
+         supabase!.from('send_attempts').select('status').eq('organization_id', orgId).limit(2000),
         supabase!.from('suppression_records').select('id', { count: 'exact', head: true }).eq('organization_id', orgId),
       ])
       if (!active) return
       if (contactRes.error || companyRes.error || taskRes.error || dealRes.error) { setError('Analytics could not be loaded.'); setLoading(false); return }
 
       let stepStates: Array<{ state: string }> = []
-      const enrollRows = (enrollRes.data ?? []) as EnrollmentRow[]
-      if (enrollRows.length) {
-        // enrollRes didn't fetch id; stepStates via enrollment lookup is optional fallback
-        stepStates = []
+      if (!sendAttemptsRes.error && sendAttemptsRes.data) {
+        stepStates = (sendAttemptsRes.data as unknown as Array<{ status: string }>).map(row => ({
+          state: row.status === 'failed' ? 'failed' : row.status === 'accepted' ? 'completed' : row.status,
+        }))
       }
 
       setContacts(contactRes.count ?? 0)
@@ -60,6 +61,7 @@ export function AnalyticsPanel({ userId }: { userId: string }) {
       setDeals((dealRes.data ?? []) as DealRow[])
       setStages((stageRes.data ?? []) as StageRow[])
       setActivityCount(activityRes.count ?? 0)
+      const enrollRows = (enrollRes.data ?? []) as EnrollmentRow[]
       setEnrollments(enrollRows)
       setKpis(calculateSequenceKpis({ enrollments: enrollRows, stepStates, sentCount: sentRes.count ?? 0 }))
       setSuppressed(suppRes.count ?? 0)
