@@ -52,6 +52,7 @@ export function OverviewPanel({ userId }: { userId: string }) {
   const [stages, setStages] = useState<Stage[]>([])
   const [kpis, setKpis] = useState<SequenceKpis | null>(null)
   const [mailableSuppressed, setMailableSuppressed] = useState(0)
+  const [kpiReloadTick, setKpiReloadTick] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -116,7 +117,13 @@ export function OverviewPanel({ userId }: { userId: string }) {
       setLoading(false)
     })()
     return () => { active = false }
-  }, [userId])
+  }, [userId, kpiReloadTick])
+
+  useEffect(() => {
+    const onReload = () => setKpiReloadTick(t => t + 1)
+    window.addEventListener('eiden:inbox-synced', onReload)
+    return () => window.removeEventListener('eiden:inbox-synced', onReload)
+  }, [])
 
   const openDeals = deals.filter(deal => deal.status === 'open')
   const wonDeals = deals.filter(deal => deal.status === 'won')

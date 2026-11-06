@@ -289,12 +289,21 @@ export function InboxPanel({ userId, canConnect }: { userId: string; canConnect:
       const result = await syncMailbox(organizationId, mailboxId)
       setSyncResult(result)
       await Promise.all([loadMessages(mailboxId), loadMailboxes(organizationId)])
+      window.dispatchEvent(new CustomEvent('eiden:inbox-synced', { detail: { organizationId, result } }))
     } catch (syncError) {
       setError(mailboxError(syncError, 'Mailbox synchronization could not be completed.'))
     } finally {
       setBusy(null)
     }
   }
+
+  useEffect(() => {
+    if (!organizationId || !selectedMailboxId) return
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void synchronize(selectedMailboxId)
+    }, 5 * 60 * 1000)
+    return () => window.clearInterval(id)
+  }, [organizationId, selectedMailboxId])
 
   const credentialsReady = serviceConfigured && Boolean(organizationId) && Boolean(email) && Boolean(password) && busy === null
 

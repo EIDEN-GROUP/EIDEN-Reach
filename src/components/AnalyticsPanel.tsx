@@ -10,6 +10,7 @@ type EnrollmentRow = { state: string; stop_reason?: string | null; next_step_pos
 export function AnalyticsPanel({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [kpisReloadTick, setKpisReloadTick] = useState(0)
   const [contacts, setContacts] = useState(0)
   const [companies, setCompanies] = useState(0)
   const [tasksOpen, setTasksOpen] = useState(0)
@@ -68,7 +69,9 @@ export function AnalyticsPanel({ userId }: { userId: string }) {
       setLoading(false)
     })()
     return () => { active = false }
-  }, [userId])
+  }, [userId, kpisReloadTick])
+
+  useEffect(() => { const onReload = () => setKpisReloadTick(t => t + 1); window.addEventListener('eiden:inbox-synced', onReload); return () => window.removeEventListener('eiden:inbox-synced', onReload) }, [])
 
   const openDeals = deals.filter(d => d.status === 'open')
   const wonDeals = deals.filter(d => d.status === 'won')

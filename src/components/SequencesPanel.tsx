@@ -34,6 +34,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
   const [contacts, setContacts] = useState<Contact[]>([])
   const [kpis, setKpis] = useState<SequenceKpis | null>(null)
+  const [kpiReloadTick, setKpiReloadTick] = useState(0)
   const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -158,9 +159,11 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       setKpis(calculateSequenceKpis({ enrollments: enrollmentsData, stepStates, sentCount: actRes.count ?? 0 }))
     })()
     return () => { active = false }
-  }, [orgId, sequences])
+  }, [orgId, sequences, kpiReloadTick])
 
   const selected = sequences.find(s => s.id === selectedId)
+
+  useEffect(() => { const onReload = () => setKpiReloadTick(t => t + 1); window.addEventListener('eiden:inbox-synced', onReload); return () => window.removeEventListener('eiden:inbox-synced', onReload) }, [])
 
   // Auto-dispatch: while this panel is mounted & autoSend enabled, process due
   // enrollments every 60s. This is the in-browser background engine, so the
