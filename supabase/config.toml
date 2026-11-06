@@ -4,3 +4,5 @@ project_id = "eiden-reach"
 verify_jwt = true
 [functions.gpt-actions]
 verify_jwt = false
+[functions.mcp-bridge]
+verify_jwt = false
