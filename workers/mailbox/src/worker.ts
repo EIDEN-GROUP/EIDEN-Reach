@@ -196,7 +196,9 @@ async function handle(request: Request, env: Env): Promise<Response> {
         } else { failed += 1 }
         results.push({ id: item.id, ok: result.ok, error: result.ok ? undefined : `${result.error}${result.code ? ' (' + result.code + ')' : ''}` })
       }
-      try { await notifySlack(typeof env.SLACK_WEBHOOK_URL === 'string' ? env.SLACK_WEBHOOK_URL : undefined, `Campaign dispatch by ${identity.email ?? identity.id} on workspace ${body.organizationId}: claimed ${due.length}, sent ${succeeded}, skipped ${retried}, failed ${failed}.`) } catch (notifyError) { console.error('DISPATCH_SLACK_FAILED', notifyError) }
+      if (due.length > 0) {
+        try { await notifySlack(typeof env.SLACK_WEBHOOK_URL === 'string' ? env.SLACK_WEBHOOK_URL : undefined, `Campaign dispatch by ${identity.email ?? identity.id} on workspace ${body.organizationId}: claimed ${due.length}, sent ${succeeded}, skipped ${retried}, failed ${failed}.`) } catch (notifyError) { console.error('DISPATCH_SLACK_FAILED', notifyError) }
+      }
       return response({ ok: true, claimed: due.length, succeeded, retried, failed, results, dispatched_at: nowSql() }, 200, origin, env)
     }
     if (url.pathname === '/mailboxes/sync') {
