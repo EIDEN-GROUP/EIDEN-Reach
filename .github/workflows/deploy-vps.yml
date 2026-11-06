@@ -7,29 +7,45 @@ on:
 env:
   NODE_VERSION: 20
   APP_NAME: eiden-reach
-  DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      frontend_dir: dist
+      worker_dir: workers/mailbox
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
       - run: npm ci
-      - run: npm run build
+      - run: npm run typecheck
+      - run: npm run test
+      - name: Build frontend (production mode)
+        run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_MAILBOX_WORKER_URL: ${{ secrets.VITE_MAILBOX_WORKER_URL }}
+
+      - name: Package worker for transfer
+        run: tar -czf ./worker-bundle.tar.gz -C workers/mailbox .
+
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
           path: dist
 
-  deploy:
+      - uses: actions/upload-artifact@v4
+        with:
+          name: worker-bundle
+          path: worker-bundle.tar.gz
+
+  deploy-frontend:
     runs-on: ubuntu-latest
     needs: build
     environment: production
@@ -39,7 +55,7 @@ jobs:
           name: frontend-dist
           path: dist
 
-      - name: Deploy with rsync over SSH
+      - name: Rsync frontend to VPS
         uses: easingthemes/ssh-deploy@v5
         env:
           SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -54,25 +70,78 @@ jobs:
             mkdir -p "${{ secrets.VPS_DEPLOY_PATH }}"
           SCRIPT_AFTER: |
             set -e
-            sudo systemctl reload "${{ secrets.VPS_SERVICE }}" 2>/dev/null || true
-            whoami && echo "Deployed at $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            if command -v systemctl >/dev/null 2>&1; then
+              sudo systemctl reload nginx >/dev/null 2>&1 || true
+            fi
+            whoami && echo "Frontend deployed at $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            echo "Files under: $PWD"
 
   deploy-worker:
     runs-on: ubuntu-latest
-    if: ${{ vars.DEPLOY_WORKER == 'true' }}
+    needs: build
     environment: production
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    if: ${{ vars.DEPLOY_SELF_HOSTED_WORKER == 'true' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/download-artifact@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - working-directory: workers/mailbox
-        run: npx wrangler deploy
-          ## Optional: make sure secrets are already set:
-          # wrangler secret put DISPATCH_TOKEN
-          # wrangler secret put SLACK_WEBHOOK_URL
+          name: worker-bundle
+          path: worker-bundle
+
+      - name: Transfer worker bundle to VPS
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: "worker-bundle.tar.gz"
+          target: "/var/www/eiden-worker"
+
+      - name: Install dependencies and restart worker
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd /var/www/eiden-worker
+            tar -xzf worker-bundle.tar.gz -C . --strip-components=0
+            npm install --omit=dev
+            # Refresh secrets securely from repository secrets
+            cat > .dev.vars <<EOF
+SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+SUPABASE_SERVICE_ROLE_KEY=${{ secrets.WORKER_SUPABASE_SERVICE_ROLE_KEY }}
+MAILBOX_ENCRYPTION_KEY=${{ secrets.MAILBOX_ENCRYPTION_KEY }}
+MAILBOX_ENCRYPTION_KEY_VERSION=${{ secrets.MAILBOX_ENCRYPTION_KEY_VERSION }}
+APP_ORIGIN=${{ secrets.APP_ORIGIN }}
+SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}
+UNSUBSCRIBE_URL_BASE=${{ secrets.WORKER_UNSUBSCRIBE_URL_BASE }}
+DISPATCH_TOKEN=${{ secrets.WORKER_DISPATCH_TOKEN }}
+SUPABASE_ANON_KEY=${{ secrets.WORKER_SUPABASE_ANON_KEY }}
+EOF
+            pids=$(pm2 list | grep eiden-worker | head -1 | awk '{print $4}') 2>/dev/null || true
+            if [ -n "$pids" ]; then
+              pm2 restart eiden-worker
+            else
+              pm2 start "npx wrangler dev --port 8787 --ip 127.0.0.1" --name eiden-worker --cwd /var/www/eiden-worker
+            fi
+            pm2 save
+            echo "Worker deployed at $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+
+  verify:
+    runs-on: ubuntu-latest
+    needs: [deploy-frontend, deploy-worker]
+    if: ${{ always() }}
+    steps:
+      - name: Smoke test front
+        run: |
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" https://reach.eiden-group.com/)
+          if [ "$STATUS" != "200" ]; then echo "Frontend returned $STATUS"; exit 1; fi
+          echo "Frontend healthy ($STATUS)"
+      - name: Smoke test worker
+        run: |
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X POST https://worker.reach.eiden-group.com/system/dispatch-due -H "X-Dispatch-Secret: ${{ secrets.WORKER_DISPATCH_TOKEN }}")
+          if [ "$STATUS" != "200" ]; then echo "Worker returned $STATUS"; exit 1; fi
+          echo "Worker healthy ($STATUS)"

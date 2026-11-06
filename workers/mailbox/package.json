@@ -1,0 +1,13 @@
+{
+  "name": "eiden-mailbox",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Cloudflare-compatible mailbox/sequence worker (Supabase REST + SMTP/IMAP).",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "postal-mime": "4.2.0"
+  }
+}
