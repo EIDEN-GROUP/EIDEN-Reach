@@ -83,7 +83,29 @@ export async function processBounceMessage(env: Env, organizationId: string, par
           }),
         }).catch(err => console.error('BOUNCE_ACTIVITY_FAILED', err))
       }
-      await notifySlack((env as unknown as { SLACK_WEBHOOK_URL?: string }).SLACK_WEBHOOK_URL, `Bounced recipient ${recipientEmail}. Sequence enrollments stopped.`)
+      let bounceStarter = enrollments[0]?.sequence_id ?? 'unknown'
+      try {
+        const seqId = enrollments[0]?.sequence_id
+        if (seqId) {
+          const bseqUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/sequences`)
+          bseqUrl.searchParams.set('select', 'owner_id')
+          bseqUrl.searchParams.set('id', `eq.${seqId}`)
+          bseqUrl.searchParams.set('limit', '1')
+          const bseqRes = await fetch(bseqUrl, { headers: serviceHeaders(env) })
+          const bseqRows = bseqRes.ok ? (await bseqRes.json() as Array<{ owner_id: string | null }>) : []
+          const ownerId = bseqRows[0]?.owner_id
+          if (ownerId) {
+            const bprofUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/profiles`)
+            bprofUrl.searchParams.set('select', 'display_name,email')
+            bprofUrl.searchParams.set('id', `eq.${ownerId}`)
+            bprofUrl.searchParams.set('limit', '1')
+            const bprofRes = await fetch(bprofUrl, { headers: serviceHeaders(env) })
+            const bprofRows = bprofRes.ok ? (await bprofRes.json() as Array<{ display_name: string | null; email: string | null }>) : []
+            bounceStarter = bprofRows[0]?.display_name || bprofRows[0]?.email || ownerId
+          }
+        }
+      } catch { }
+      await notifySlack((env as unknown as { SLACK_WEBHOOK_URL?: string }).SLACK_WEBHOOK_URL, `Bounced recipient ${recipientEmail}. Sequence enrollments stopped — sequence started by ${bounceStarter}.`)
       stopped += enrollments.length
     }
     return stopped
@@ -159,7 +181,26 @@ async function stopEnrollmentsForContact(env: Env, organizationId: string, conta
     })
     if (!insertRes.ok) console.error('ACTIVITY_EVENT_FAILED', insertRes.statusText)
 
-    await notifySlack((env as unknown as { SLACK_WEBHOOK_URL?: string }).SLACK_WEBHOOK_URL, `Reply received from ${from}. Sequence paused enrollment ${enrollment.id}.`)
+    let replyStarter = enrollment.sequence_id
+    try {
+      const replyUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/sequences`)
+      replyUrl.searchParams.set('select', 'owner_id')
+      replyUrl.searchParams.set('id', `eq.${enrollment.sequence_id}`)
+      replyUrl.searchParams.set('limit', '1')
+      const replyRes = await fetch(replyUrl, { headers: serviceHeaders(env) })
+      const replySeq = replyRes.ok ? (await replyRes.json() as Array<{ owner_id: string | null }>) : []
+      const replyOwnerId = replySeq[0]?.owner_id
+      if (replyOwnerId) {
+        const profUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/profiles`)
+      profUrl.searchParams.set('select', 'display_name,email')
+      profUrl.searchParams.set('id', `eq.${replyOwnerId}`)
+      profUrl.searchParams.set('limit', '1')
+      const profRes = await fetch(profUrl, { headers: serviceHeaders(env) })
+      const replyProfiles = profRes.ok ? (await profRes.json() as Array<{ display_name: string | null; email: string | null }>) : []
+        replyStarter = replyProfiles[0]?.display_name || replyProfiles[0]?.email || replyOwnerId
+      }
+    } catch { }
+    await notifySlack((env as unknown as { SLACK_WEBHOOK_URL?: string }).SLACK_WEBHOOK_URL, `Reply received from ${from} — sequence started by ${replyStarter}.`)
   }
   return enrollments.length
 }

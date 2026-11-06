@@ -92,7 +92,18 @@ export async function handleUnsubscribe(env: Env, token: string): Promise<Unsubs
     }),
   })
 
-  await notifySlack((env as unknown as { SLACK_WEBHOOK_URL?: string }).SLACK_WEBHOOK_URL, `Unsubscribe: ${email ?? 'contact'} opted out via email link. All active enrollments stopped.`)
+  let unsubscribeStarter = record.sequence_id ?? 'unknown'
+  try {
+    if (record.sequence_id) {
+      const seqs = await rest<Array<{ owner_id: string | null }>>(env, `sequences?select=owner_id&id=eq.${record.sequence_id}&limit=1`)
+      const ownerId = seqs[0]?.owner_id
+      if (ownerId) {
+        const profiles = await rest<Array<{ display_name: string | null; email: string | null }>>(env, `profiles?select=display_name,email&id=eq.${ownerId}&limit=1`)
+        unsubscribeStarter = profiles[0]?.display_name || profiles[0]?.email || ownerId
+      }
+    }
+  } catch { }
+  await notifySlack((env as unknown as { SLACK_WEBHOOK_URL?: string }).SLACK_WEBHOOK_URL, `Unsubscribe: ${email ?? 'contact'} opted out via email link. All active enrollments stopped — sequence started by ${unsubscribeStarter}.`)
 
   await rest(env, `unsubscribe_tokens?id=eq.${record.id}`, {
     method: 'PATCH',
