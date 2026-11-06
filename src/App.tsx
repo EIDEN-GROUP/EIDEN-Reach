@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { databaseConfigured, supabase } from './lib/supabase'
 import { loadProfile } from './lib/profile'
+import { listMailboxes, syncMailbox } from './lib/mailbox-api'
 import type { Profile } from './lib/profile'
 import { ProfileAvatar } from './components/ProfileAvatar'
 import Typeahead from './components/DataList'
@@ -66,6 +67,7 @@ export default function App() {
   const [memberRole, setMemberRole] = useState('')
   const [organizationName, setOrganizationName] = useState('')
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [backgroundOrganizationId, setBackgroundOrganizationId] = useState('')
 
   useEffect(() => {
     if (!session || !supabase) { setProfile(null); return }
@@ -90,6 +92,7 @@ export default function App() {
       if (data?.organization_id) {
         const organization = await supabase!.from('organizations').select('name').eq('id', data.organization_id).maybeSingle()
         if (active) setOrganizationName(organization.data?.name ?? '')
+      if (active && data?.organization_id) setBackgroundOrganizationId(data.organization_id)
       }
     }, () => { if (active) { setMemberRole(''); setOrganizationName('') } })
     return () => { active = false }
@@ -101,6 +104,26 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [menuOpen])
+  useEffect(() => {
+    if (!session || !supabase || !backgroundOrganizationId) return
+    async function syncOnce() {
+      try {
+        const { mailboxes } = await listMailboxes(backgroundOrganizationId)
+        for (const mailbox of mailboxes) {
+          try {
+            await syncMailbox(backgroundOrganizationId, mailbox.id)
+            window.dispatchEvent(new CustomEvent('eiden:inbox-synced', { detail: { organizationId: backgroundOrganizationId, mailboxId: mailbox.id } }))
+          } catch {}
+        }
+      } catch {}
+    }
+    void syncOnce()
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void syncOnce()
+    }, 5 * 60 * 1000)
+    return () => { window.clearInterval(interval) }
+  }, [session?.user.id, backgroundOrganizationId])
+
   if (databaseConfigured && authLoading) return <div className="auth-loading"><img className="auth-logo-dark" src={nodeworkLogo} alt="" aria-hidden="true" /><p>Checking your sign-in session…</p></div>
   if (databaseConfigured && !session) return <SignIn />
 
