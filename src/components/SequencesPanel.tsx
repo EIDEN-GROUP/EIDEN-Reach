@@ -49,6 +49,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   const [enrollOpen, setEnrollOpen] = useState(false)
   const [enrollSearch, setEnrollSearch] = useState('')
   const [enrollSelected, setEnrollSelected] = useState<Record<string, boolean>>({})
+  const [globallyEnrolledIds, setGloballyEnrolledIds] = useState<Set<string>>(new Set())
   const [enrollCompany, setEnrollCompany] = useState('')
   const [enrollLifecycle, setEnrollLifecycle] = useState('')
   const [enrollError, setEnrollError] = useState('')
@@ -403,6 +404,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       else setEnrollError(ins.error.message)
     } else {
       setEnrollments(current => [ins.data as unknown as Enrollment, ...current])
+      setGloballyEnrolledIds(previous => new Set([...previous, enrollment_id]))
     }
     setSaving(false)
     return !ins.error
@@ -423,6 +425,15 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     }
     setEnrollInfo(`Enrolled ${added}${failed ? ` Â· ${failed} already enrolled or failed` : ''}`)
     setEnrollSelected({})
+    if (selected?.status === 'active' && added > 0) {
+      try {
+        await dispatchDue(orgId, Math.min(10, added + 2))
+        if (selectedId) {
+          const r = await supabase!.from('sequence_enrollments').select('id,contact_id,state,enrolled_at,next_step_position,next_run_at,stopped_at,stop_reason,contacts:contact_id(first_name,last_name,email)').eq('sequence_id', selectedId).order('enrolled_at', { ascending: false }).limit(500)
+          if (!r.error && r.data) setEnrollments((r.data as unknown as Enrollment[]))
+        }
+      } catch {}
+    }
     setSaving(false)
   }
 
@@ -494,10 +505,23 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     bounced: enrollments.filter(e => e.state === 'bounced' || e.stop_reason === 'hard_bounce').length,
   }
 
+  useEffect(() => {
+    if (!orgId) return
+    let active = true
+    void (async () => {
+      const { data, error } = await supabase!.from('sequence_enrollments').select('contact_id').eq('organization_id', orgId)
+      if (!active) return
+      if (error) return
+      setGloballyEnrolledIds(new Set((data ?? []).map((row: { contact_id: string }) => row.contact_id)))
+    })()
+    return () => { active = false }
+  }, [orgId])
+
   const enrolledContactIds = useMemo(() => new Set(enrollments.map(e => e.contact_id)), [enrollments])
   const filteredContacts = useMemo(() => {
     const term = enrollSearch.trim().toLowerCase()
     return contacts.filter(c => {
+      if (globallyEnrolledIds.has(c.id)) return false
       if (enrollLifecycle && c.lifecycle !== enrollLifecycle) return false
       const companyName = c.companies?.name ?? ''
       if (enrollCompany && !companyName.toLowerCase().includes(enrollCompany.toLowerCase())) return false
