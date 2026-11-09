@@ -46,14 +46,21 @@ Deno.serve(async request => {
     const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } })
     const { data: authData, error: authError } = await anon.auth.getUser(authorization.slice('Bearer '.length))
     if (authError || !authData.user) return respond({ error: 'Your session is invalid or expired.' }, 401, origin)
+    const actorId = authData.user.id
 
     const raw = await request.json().catch(() => null) as Record<string, unknown> | null
     const action = raw?.action as string | undefined
     if (!action) return respond({ error: 'Missing action.' }, 400, origin)
 
-    const acting = await getActingOrg(admin, authData.user.id)
+    const acting = await getActingOrg(admin, actorId)
     if (!acting) return respond({ error: 'Only super_admin members can manage workspaces.' }, 403, origin)
     const parentOrganizationId = acting.organizationId
+
+    async function audit(action_: string, resource_type?: string | null, resource_id?: string | null, result_: string = 'success', details: unknown = null): Promise<void> {
+      try {
+        await admin.from('audit_logs').insert({ organization_id: parentOrganizationId, actor_id: actorId, action: `workspace.${action_}`, resource_type, resource_id, result: result_, details: (details ?? {}) as Record<string, unknown> })
+      } catch (error) { console.error('AUDIT_WRITE_FAILED', error) }
+    }
 
     // Guard: the acting org must itself be a root (no parent). Cyclic management is not allowed.
     const { data: parentRow } = await admin.from('organizations').select('parent_organization_id').eq('id', parentOrganizationId).maybeSingle()
@@ -65,7 +72,7 @@ Deno.serve(async request => {
         .select('id,name,created_at')
         .eq('parent_organization_id', parentOrganizationId)
         .order('name', { ascending: true })
-      if (childErr) return respond({ error: childErr.message }, 503, origin)
+      if (childErr) { await audit('list', 'organizations', null, 'failure', { message: childErr.message }); return respond({ error: childErr.message }, 503, origin) }
 
       const workspaces = [] as Array<Record<string, unknown>>
       for (const child of children ?? []) {
@@ -97,6 +104,7 @@ Deno.serve(async request => {
           ownerName,
         })
       }
+      await audit('list', 'organizations', null, 'success', { children: workspaces.length })
       return respond({ workspaces }, 200, origin)
     }
 
@@ -104,7 +112,7 @@ Deno.serve(async request => {
       const workspaceId = raw?.workspaceId
       if (typeof workspaceId !== 'string' || !uuidPattern.test(workspaceId)) return respond({ error: 'Valid workspaceId required.' }, 400, origin)
       const { data: child } = await admin.from('organizations').select('id').eq('id', workspaceId).eq('parent_organization_id', parentOrganizationId).maybeSingle()
-      if (!child) return respond({ error: 'That workspace is not managed by you.' }, 403, origin)
+      if (!child) { await audit('access_denied', 'organizations', workspaceId, 'denied', { reason: 'not_managed' }); return respond({ error: 'That workspace is not managed by you.' }, 403, origin) }
 
       const [enrollRes, sentRes, contactsRes, suppressedRes] = await Promise.all([
         admin.from('sequence_enrollments').select('state,stop_reason').eq('organization_id', workspaceId).limit(5000),
@@ -114,12 +122,14 @@ Deno.serve(async request => {
       ])
       const byState: Record<string, number> = {}
       for (const row of (enrollRes.data ?? []) as Array<{ state: string }>) byState[row.state] = (byState[row.state] ?? 0) + 1
+      const suppressedCount = suppressedRes.count ?? 0
+      await audit('kpis', 'organizations', workspaceId, 'success', { emailsSent: sentRes.count ?? 0, contactsTotal: contactsRes.count ?? 0, suppressed: suppressedCount })
       return respond({
         workspaceId,
         enrollmentsByState: byState,
         emailsSent: sentRes.count ?? 0,
         contactsTotal: contactsRes.count ?? 0,
-        suppressed: suppressedRes.count ?? 0,
+        suppressed: suppressedCount,
       }, 200, origin)
     }
 
@@ -128,7 +138,7 @@ Deno.serve(async request => {
       const limit = Math.min(50, Math.max(1, Number(raw?.limit ?? 20)))
       if (typeof workspaceId !== 'string' || !uuidPattern.test(workspaceId)) return respond({ error: 'Valid workspaceId required.' }, 400, origin)
       const { data: child } = await admin.from('organizations').select('id').eq('id', workspaceId).eq('parent_organization_id', parentOrganizationId).maybeSingle()
-      if (!child) return respond({ error: 'That workspace is not managed by you.' }, 403, origin)
+      if (!child) { await audit('access_denied', 'organizations', workspaceId, 'denied', { reason: 'not_managed' }); return respond({ error: 'That workspace is not managed by you.' }, 403, origin) }
 
       const { data: messages, error: msgErr } = await admin
         .from('email_messages')
@@ -155,6 +165,7 @@ Deno.serve(async request => {
         threadId: m.thread_id,
         participants: byMessage.get(m.id) ?? [],
       }))
+      await audit('emails', 'email_messages', workspaceId, 'success', { returned: emails.length })
       return respond({ emails }, 200, origin)
     }
 
@@ -164,7 +175,7 @@ Deno.serve(async request => {
       if (typeof workspaceId !== 'string' || !uuidPattern.test(workspaceId)) return respond({ error: 'Valid workspaceId required.' }, 400, origin)
       if (typeof emailId !== 'string' || !uuidPattern.test(emailId)) return respond({ error: 'Valid emailId required.' }, 400, origin)
       const { data: child } = await admin.from('organizations').select('id').eq('id', workspaceId).eq('parent_organization_id', parentOrganizationId).maybeSingle()
-      if (!child) return respond({ error: 'That workspace is not managed by you.' }, 403, origin)
+      if (!child) { await audit('access_denied', 'organizations', workspaceId, 'denied', { reason: 'not_managed' }); return respond({ error: 'That workspace is not managed by you.' }, 403, origin) }
 
       const { data: message, error: msgErr } = await admin
         .from('email_messages')
@@ -172,14 +183,15 @@ Deno.serve(async request => {
         .eq('organization_id', workspaceId)
         .eq('id', emailId)
         .maybeSingle()
-      if (msgErr || !message) return respond({ error: 'Email not found.' }, 404, origin)
+      if (msgErr || !message) { await audit('email_view', 'email_messages', emailId, 'failure', { workspaceId, reason: msgErr?.message }); return respond({ error: 'Email not found.' }, 404, origin) }
+      await audit('email_view', 'email_messages', emailId, 'success', { workspaceId, subject: message.subject ?? null })
       return respond({ id: message.id, direction: message.direction, subject: message.subject, receivedAt: message.received_at, sentAt: message.sent_at, textBody: message.text_body, htmlBody: message.html_body }, 200, origin)
     }
 
     if (action === 'invite') {
       const email = typeof raw.email === 'string' ? raw.email.trim().toLowerCase() : ''
       const displayName = typeof raw.displayName === 'string' ? raw.displayName.trim() : ''
-      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return respond({ error: 'A valid email is required.' }, 400, origin)
+      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { await audit('invite_failed', 'organizations', null, 'denied', { email, reason: 'invalid_email' }); return respond({ error: 'A valid email is required.' }, 400, origin) }
 
       // Create the new organization first so every invited user always gets their own.
       const orgName = (displayName || email.split('@')[0]) + "'s workspace"
@@ -188,31 +200,32 @@ Deno.serve(async request => {
         .insert({ name: orgName, parent_organization_id: parentOrganizationId })
         .select('id')
         .single()
-      if (orgErr || !newOrg) return respond({ error: 'Workspace could not be created.' }, 503, origin)
+      if (orgErr || !newOrg) { await audit('invite_failed', 'organizations', null, 'failure', { email, displayName, message: orgErr?.message }); return respond({ error: 'Workspace could not be created.' }, 503, origin) }
 
       // Look up existing user or invite via Supabase Auth.
       const { data: existingProfile, error: profileErr } = await admin.from('profiles').select('id').ilike('email', email).maybeSingle()
-      if (profileErr) return respond({ error: 'Could not check existing users.' }, 503, origin)
+      if (profileErr) { await audit('invite_failed', 'organizations', newOrg.id, 'failure', { email, displayName, message: profileErr.message }); return respond({ error: 'Could not check existing users.' }, 503, origin) }
 
       let targetUserId: string
       let invitationSent = false
       if (existingProfile) {
         targetUserId = existingProfile.id
         const { data: alreadyMember } = await admin.from('memberships').select('user_id').eq('organization_id', newOrg.id).eq('user_id', targetUserId).maybeSingle()
-        if (alreadyMember) return respond({ error: 'User already belongs to that workspace.' }, 409, origin)
+        if (alreadyMember) { await audit('invite_failed', 'organizations', newOrg.id, 'denied', { email, displayName, reason: 'already_member' }); return respond({ error: 'User already belongs to that workspace.' }, 409, origin) }
       } else {
         const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
           data: displayName ? { display_name: displayName } : {},
           ...(appOrigin ? { redirectTo: appOrigin } : {}),
         })
-        if (inviteErr || !invited.user) return respond({ error: 'Invitation could not be sent.' }, 502, origin)
+        if (inviteErr || !invited.user) { await audit('invite_failed', 'organizations', newOrg.id, 'failure', { email, displayName, message: inviteErr?.message }); return respond({ error: 'Invitation could not be sent.' }, 502, origin) }
         targetUserId = invited.user.id
         invitationSent = true
       }
 
       const { error: addErr } = await admin.from('memberships').insert({ organization_id: newOrg.id, user_id: targetUserId, role: 'super_admin' })
-      if (addErr) return respond({ error: invitationSent ? 'Invite sent but membership could not be created.' : 'Membership could not be created.' }, 503, origin)
+      if (addErr) { await audit('invite_failed', 'organizations', newOrg.id, 'failure', { email, displayName, message: addErr.message, invitationSent }); return respond({ error: invitationSent ? 'Invite sent but membership could not be created.' : 'Membership could not be created.' }, 503, origin) }
 
+      await audit('invite', 'organizations', newOrg.id, 'success', { email, displayName, invitationSent, targetUserId })
       return respond({ ok: true, invitationSent, organizationId: newOrg.id, message: invitationSent ? 'Invitation sent — new workspace created.' : 'Existing user assigned their own workspace.' }, 200, origin)
     }
 

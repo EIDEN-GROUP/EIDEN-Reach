@@ -24,5 +24,8 @@ All actions require the caller to be `super_admin` of a **root** organization (`
 1. **Members & audit** — existing team members + audit log (unchanged)
 2. **Managed workspaces** — only `super_admin` members of the root see it; lists each child workspace, lets you drill in and see KPI tiles and recent emails, plus a modal to read full message text.
 
+## Audit parity
+Every call to `workspace-admin` writes an `audit_logs` entry with `action = 'workspace.<action>'` (for example `workspace.invite`, `workspace.kpis`, `workspace.email_view`, `workspace.emails`, `workspace.list`) and a result of `success`, `failure`, or `denied`. Resource context (workspace id, email, subject) and metrics are in `details`. This gives the root super_admin a full chronological record of everything done on managed workspaces.
+
 ## Invite flow
-The Members & audit tab keeps the legacy invite into the **current** workspace for compatibility. The Managed workspaces tab's **Create workspace & invite** form is the new mechanism that spin-up a child workspace per invite.
+The Members & audit tab keeps the legacy invite into the **current** workspace for compatibility. The Managed workspaces tab's **Create workspace & invite** form is the new mechanism that spin-up a child workspace per invite. Use it for accounts that must get their own isolated workspace.
