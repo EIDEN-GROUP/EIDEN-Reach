@@ -6,3 +6,6 @@ verify_jwt = true
 verify_jwt = false
 [functions.mcp-bridge]
 verify_jwt = false
+
+[functions.workspace-admin]
+verify_jwt = true

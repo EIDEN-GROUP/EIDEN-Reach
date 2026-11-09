@@ -223,6 +223,13 @@ img.brand-mark { object-fit: contain; background: none; border-radius: 0; }
 .contact-readonly dd { margin: 0; color: var(--ink); }
 .role-label { text-transform: capitalize; }
 .team-layout { display: grid; gap: 16px; }
+.tabs-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.tab-button { display: grid; gap: 2px; min-width: 200px; padding: 10px 14px; text-align: left; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); cursor: pointer; color: var(--ink); }
+.tab-button small { color: var(--muted); font-size: 12px; }
+.tab-button:hover { border-color: var(--line-strong); }
+.tab-button.active { border-color: var(--primary); background: var(--primary-soft); box-shadow: var(--shadow-soft); }
+.row-selected { background: var(--selected); }
+.status-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--subtle); color: var(--muted); }
 
 /* ── Timelines ─────────────────────────────────────────────────────── */
 .activity-timeline { margin: 0 16px 14px; padding: 12px 0 0; border-top: 1px solid var(--line); }
