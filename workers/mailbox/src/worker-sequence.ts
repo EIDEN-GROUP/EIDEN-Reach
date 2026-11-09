@@ -180,7 +180,7 @@ export function applyUnsubscribeMergeFields(html: string, text: string, link: st
 }
 
 export type SequenceSendResult =
-  | { ok: true; enrollmentId: string; contactEmail: string; stepPosition: number; unsubscribeUrl: string }
+  | { ok: true; enrollmentId: string; contactEmail: string; stepPosition: number; unsubscribeUrl: string; alreadySent?: boolean }
   | { ok: false; status: number; error: string; code?: string }
 
 export async function sendSequenceStep(env: Env, input: { organizationId: string; enrollmentId: string; actorId: string }): Promise<SequenceSendResult> {
@@ -243,6 +243,15 @@ export async function sendSequenceStep(env: Env, input: { organizationId: string
     return { ok: false, status: 503, error: 'Mailbox credentials could not be decrypted.', code: 'credentials_decrypt_failed' }
   }
 
+  const attemptIdempotencyKey = `seq-send-${enrollment.id}-${step.position}`
+
+  // Idempotent send: skip if this exact step was already accepted/delivered.
+  const existing = await rest<Array<{ status: string }>>(env, `send_attempts?select=status&idempotency_key=eq.${encodeURIComponent(attemptIdempotencyKey)}&limit=1`)
+  if (existing.find(row => row.status === 'accepted')) {
+    const unsubscribeUrl = 'https://example.invalid/unsubscribe'
+    return { ok: true, enrollmentId: enrollment.id, contactEmail: contact.email, stepPosition: step.position, unsubscribeUrl, alreadySent: true }
+  }
+
   const token = await createUnsubscribeToken(env, {
     organizationId: enrollment.organization_id,
     contactId: contact.id,
@@ -289,7 +298,7 @@ export async function sendSequenceStep(env: Env, input: { organizationId: string
           enrollment_id: enrollment.id,
           sequence_step_id: step.id,
           contact_id: contact.id,
-          idempotency_key: `seq-fail-${enrollment.id}-${step.position}-${Date.now()}`,
+          idempotency_key: attemptIdempotencyKey,
           status: 'failed',
           started_at: now,
           finished_at: now,
@@ -328,7 +337,7 @@ export async function sendSequenceStep(env: Env, input: { organizationId: string
       enrollment_id: enrollment.id,
       sequence_step_id: step.id,
       contact_id: contact.id,
-      idempotency_key: `seq-send-${enrollment.id}-${step.position}-${Date.now()}`,
+      idempotency_key: attemptIdempotencyKey,
       status: 'accepted',
       started_at: now,
       finished_at: now,

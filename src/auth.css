@@ -22,6 +22,7 @@
 .auth-card h2 { margin: 0; color: var(--ink); font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; }
 .auth-card-head p { margin: 0; color: var(--muted); font-size: 14px; }
 .auth-error { padding: 10px 12px; color: var(--danger); background: var(--danger-soft); border: 1px solid oklch(0.88 0.05 27); border-radius: var(--radius-sm); font-size: 13px; line-height: 1.45; }
+.auth-notice { padding: 10px 12px; margin-bottom: 4px; color: var(--warning); background: var(--warning-soft); border: 1px solid oklch(0.88 0.09 70); border-radius: var(--radius-sm); font-size: 13px; line-height: 1.45; }
 
 .auth-field { display: grid; gap: 6px; }
 .auth-field > span:first-child { color: var(--ink); font-size: 13px; font-weight: 600; }

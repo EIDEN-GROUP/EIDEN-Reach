@@ -10,12 +10,13 @@ const highlights = [
   { icon: ShieldCheck, text: 'Access and every change are set and recorded by your workspace.' },
 ]
 
-export function SignIn() {
+export function SignIn({ notice }: { notice?: string }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  void notice
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -43,6 +44,7 @@ export function SignIn() {
 
     <section className="auth-form-side">
       <form className="auth-card" onSubmit={submit} noValidate={false}>
+        {notice && <div className="auth-notice" role="status">{notice}</div>}
         <header className="auth-card-head">
           <img className="auth-card-logo" src={nodeworkLogo} alt="" aria-hidden="true" />
           <h2>Sign in</h2>

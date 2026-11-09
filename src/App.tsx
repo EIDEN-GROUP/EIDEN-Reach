@@ -67,6 +67,7 @@ export default function App() {
   const [memberRole, setMemberRole] = useState('')
   const [organizationName, setOrganizationName] = useState('')
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [authNotice, setAuthNotice] = useState('')
   const [backgroundOrganizationId, setBackgroundOrganizationId] = useState('')
 
   useEffect(() => {
@@ -79,7 +80,10 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return
     void supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false) }).catch(() => setAuthLoading(false))
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setAuthNotice(event === 'SIGNED_OUT' ? 'Your session expired. Please sign in again.' : '')
+      setSession(nextSession)
+    })
     return () => subscription.unsubscribe()
   }, [])
 
@@ -125,7 +129,7 @@ export default function App() {
   }, [session?.user.id, backgroundOrganizationId])
 
   if (databaseConfigured && authLoading) return <div className="auth-loading"><img className="auth-logo-dark" src={nodeworkLogo} alt="" aria-hidden="true" /><p>Checking your sign-in session…</p></div>
-  if (databaseConfigured && !session) return <SignIn />
+  if (databaseConfigured && !session) return <SignIn notice={authNotice} />
 
   return <div className="app-shell">
     {menuOpen && <button className="scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
