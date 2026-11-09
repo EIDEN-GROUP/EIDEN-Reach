@@ -15,7 +15,12 @@ type ManagedWorkspace = {
   ownerEmail: string | null
   ownerName: string | null
 }
-type WorkspaceListResponse = { workspaces?: ManagedWorkspace[]; error?: string }
+/** Raw Edge Function list() payload: tolerate both the current and the legacy key. */
+type ManagedWorkspaceWire = Omit<ManagedWorkspace, 'enrollmentsByState'> & {
+  enrollmentsByState?: Record<string, number>
+  enrollmentStates?: Record<string, number>
+}
+type WorkspaceListResponse = { workspaces?: ManagedWorkspaceWire[]; error?: string }
 type WorkspaceKpisResponse = { workspaceId: string; enrollmentsByState: Record<string, number>; emailsSent: number; contactsTotal: number; suppressed: number; error?: string }
 type WorkspaceEmail = {
   id: string
@@ -92,7 +97,13 @@ export function TeamPanel({ userId, role }: { userId: string; role: string }) {
     const result = await supabase!.functions.invoke<WorkspaceListResponse>('workspace-admin', { body: { action: 'list' } })
     if (!active()) return
     if (result.error || result.data?.error) { setWsError('Managed workspaces could not be loaded. Check the Edge Function configuration and access.'); setWorkspaces([]) }
-    else { setWorkspaces(result.data?.workspaces ?? []); setWsError('') }
+    else {
+      const normalized = (result.data?.workspaces ?? []).map(workspace => ({
+        ...workspace,
+        enrollmentsByState: workspace.enrollmentsByState ?? workspace.enrollmentStates ?? {},
+      }))
+      setWorkspaces(normalized); setWsError('')
+    }
     setWsLoading(false)
   }
 

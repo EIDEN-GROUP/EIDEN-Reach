@@ -8,19 +8,20 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 const appOrigin = Deno.env.get('APP_ORIGIN')
+const ALLOWED_ORIGINS = (appOrigin ? appOrigin.split(',').map(x => x.trim()) : []).concat(['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:4173']).filter(Boolean)
 
 const jsonHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function respond(body: unknown, status: number, origin: string | null) {
   const headers = new Headers(jsonHeaders)
-  if (origin && appOrigin && origin === appOrigin) {
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
     headers.set('Access-Control-Allow-Origin', origin)
     headers.set('Vary', 'Origin')
     headers.set('Access-Control-Allow-Headers', 'authorization, apikey, content-type, x-client-info')
     headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
   }
-  return new Response(JSON.stringify(body), { status, headers })
+  return new Response(status === 204 ? null : JSON.stringify(body), { status, headers })
 }
 
 async function getActingOrg(
@@ -98,6 +99,9 @@ Deno.serve(async request => {
           createdAt: child.created_at,
           memberCount: memberCount ?? 0,
           enrollmentCount: (enrollmentRes.data ?? []).length,
+          // `enrollmentsByState` matches the client contract; keep the
+          // legacy `enrollmentStates` alias for older builds.
+          enrollmentsByState: byState,
           enrollmentStates: byState,
           sentCount: sentRes.count ?? 0,
           ownerEmail,
