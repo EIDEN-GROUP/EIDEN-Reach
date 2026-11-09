@@ -8,7 +8,7 @@ import {
   ContactRound, Inbox, Layers3, Menu, Search, Settings, ShieldCheck,
   Plus, UsersRound, X,
 } from 'lucide-react'
-import { databaseConfigured, supabase } from './lib/supabase'
+import { databaseConfigured, refreshSession, supabase } from './lib/supabase'
 import { loadProfile } from './lib/profile'
 import { listMailboxes, syncMailbox } from './lib/mailbox-api'
 import type { Profile } from './lib/profile'
@@ -79,12 +79,19 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return
-    void supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false) }).catch(() => setAuthLoading(false))
+    void supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session); setAuthLoading(false)
+    }).catch(() => setAuthLoading(false))
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setAuthNotice(event === 'SIGNED_OUT' ? 'Your session expired. Please sign in again.' : '')
       setSession(nextSession)
     })
-    return () => subscription.unsubscribe()
+    // Single manual long-interval refresh — keeps us safely on the right side
+    // of the Supabase free-tier refresh-token rate limit.
+    const refreshInterval = window.setInterval(() => {
+      void refreshSession()
+    }, 10 * 60 * 1000)
+    return () => { subscription.unsubscribe(); window.clearInterval(refreshInterval) }
   }, [])
 
   useEffect(() => {
