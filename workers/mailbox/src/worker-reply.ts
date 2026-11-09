@@ -114,13 +114,13 @@ export async function processBounceMessage(env: Env, organizationId: string, par
     return 0
   }
 }
-export async function stopEnrollmentsForReply(env: Env, organizationId: string, participants: Array<{ participant_type: string; email_address: string }>, inReplyTo: string | null, references: string[]): Promise<number> {
+export async function stopEnrollmentsForReply(env: Env, organizationId: string, participants: Array<{ participant_type: string; email_address: string }>, inReplyTo: string | null, references: string[], subject?: string | null, text?: string | null): Promise<number> {
   try {
     const from = participants.find(p => p.participant_type === 'from')?.email_address?.trim().toLowerCase()
     if (!from) return 0
     const contactId = await findContactIdByEmail(env, organizationId, from)
     if (!contactId) return 0
-    return await stopEnrollmentsForContact(env, organizationId, contactId, from, inReplyTo, references)
+    return await stopEnrollmentsForContact(env, organizationId, contactId, from, inReplyTo, references, subject ?? null, text ?? null)
   } catch (error) {
     console.error('REPLY_STOP_ERROR', error)
     return 0
@@ -139,7 +139,11 @@ async function findContactIdByEmail(env: Env, organizationId: string, email: str
   return rows[0]?.id ?? null
 }
 
-async function stopEnrollmentsForContact(env: Env, organizationId: string, contactId: string, from: string, inReplyTo: string | null, references: string[]): Promise<number> {
+async function stopEnrollmentsForContact(env: Env, organizationId: string, contactId: string, from: string, inReplyTo: string | null, references: string[], subject?: string | null, text?: string | null): Promise<number> {
+  const classifierHaystack = `${subject ?? ''}\n${text ?? ''}`.toLowerCase()
+  const optOut = /\b(unsubscribe|no thanks|not interested|remove me|stop emailing|do not contact|don['’]t contact|opt out|please take me off|don['’]t email)\b/i.test(classifierHaystack)
+  const interestedMatch = /(\byes\b|\binterested\b|sounds good|let['’]s\b|let us\b|\bgreat\b|\bdeal\b|\bsure\b|\bcall me\b|meeting|schedule|\bchat\b|\btalk\b|\bavailable\b|go ahead|perfect|absolutely|(?:send me|please send)|\bmore info\b)/i.test(classifierHaystack)
+  const classification = interestedMatch && !optOut ? 'interested' : 'reply'
   const enrollmentUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/sequence_enrollments`)
   enrollmentUrl.searchParams.set('select', 'id,sequence_id')
   enrollmentUrl.searchParams.set('organization_id', `eq.${organizationId}`)
@@ -156,7 +160,7 @@ async function stopEnrollmentsForContact(env: Env, organizationId: string, conta
   const patchRes = await fetch(patchUrl, {
     method: 'PATCH',
     headers: { ...serviceHeaders(env, true), Prefer: 'return=minimal' },
-    body: JSON.stringify({ state: 'replied', stopped_at: stoppedAt, stop_reason: 'reply_received', next_run_at: null }),
+    body: JSON.stringify({ state: classification === 'interested' ? 'interested' : 'replied', stopped_at: stoppedAt, stop_reason: classification === 'interested' ? 'reply_interested' : 'reply_received', next_run_at: null }),
   })
   if (!patchRes.ok) return 0
 
@@ -176,7 +180,7 @@ async function stopEnrollmentsForContact(env: Env, organizationId: string, conta
         occurred_at: stoppedAt,
         source: 'mailbox_sync',
         idempotency_key: `reply:${organizationId}:${enrollment.id}:${from}`,
-        metadata: { in_reply_to: inReplyTo ?? null, references },
+        metadata: { in_reply_to: inReplyTo ?? null, references, classification: classification === 'interested' ? 'interested' : 'reply_received' },
       }),
     })
     if (!insertRes.ok) console.error('ACTIVITY_EVENT_FAILED', insertRes.statusText)

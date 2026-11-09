@@ -320,7 +320,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
             target_participants: mapped.participants,
             target_attachments: mapped.attachments,
           })
-          await stopEnrollmentsForReply(env, account.organization_id, mapped.participants, mapped.message.in_reply_to, mapped.message.references_header)
+          await stopEnrollmentsForReply(env, account.organization_id, mapped.participants, mapped.message.in_reply_to, mapped.message.references_header, mapped.message.subject ?? null, mapped.message.text_body ?? null)
            await processBounceMessage(env, account.organization_id, mapped.participants, mapped.message.subject, (mapped.message as {raw_headers?:unknown}).raw_headers)
           synchronizedMessages += 1
         }
