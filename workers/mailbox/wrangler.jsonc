@@ -6,6 +6,6 @@
     "APP_ORIGIN": "http://localhost:5173"
   },
   "triggers": {
-    "crons": ["*/15 * * * *"]
+    "crons": ["*/5 * * * *"]
   }
 }

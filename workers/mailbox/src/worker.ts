@@ -13,6 +13,7 @@ import { stopEnrollmentsForReply, reconcileReplyStoppedEnrollments, processBounc
 import { decodeBase64, decryptCredentials, encryptCredentials } from './worker-crypto'
 import { handleUnsubscribe, sendSequenceStep, unsubscribeConfirmationHtml } from './worker-sequence'
 import { handleSystemDispatch } from './worker-dispatch'
+import { runMailboxSync } from './worker-mailbox-sync'
 
 import type { Env } from './runtime'
 import { serviceHeaders } from './runtime'
@@ -116,6 +117,29 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'POST') return response({ error: 'Method not allowed.' }, 405, origin, env)
 
   // No-auth background dispatcher (system-secret-gated)
+  if (url.pathname === '/system/mailbox-sync-all' && request.method === 'POST') {
+    const supplied = request.headers.get('x-dispatch-secret') ?? ''
+    const ok = !!env.DISPATCH_TOKEN && supplied === env.DISPATCH_TOKEN
+    if (!ok) return response({ error: 'Unauthorized' }, 401, origin, env)
+    const listRes = await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/mailbox_accounts?select=id,organization_id&connection_state=eq.connected&limit=200`, { headers: serviceHeaders(env) })
+    const mailboxes = listRes.ok ? (await listRes.json() as Array<{ id: string; organization_id: string }>) : []
+    const results: Array<{ id: string; ok: boolean; status?: number; error?: string }> = []
+    for (const mailbox of mailboxes) {
+      try {
+        const r = await fetch(new URL('/mailboxes/sync', `http://127.0.0.1:8787`), {
+          method: 'POST',
+          headers: { 'x-internal-cron-secret': env.DISPATCH_TOKEN ?? '', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ organizationId: mailbox.organization_id, mailboxId: mailbox.id }),
+        })
+        const text = await r.text().catch(() => '')
+        results.push({ id: mailbox.id, ok: r.ok, status: r.status, error: r.ok ? undefined : text.slice(0, 200) })
+      } catch (error) {
+        results.push({ id: mailbox.id, ok: false, error: error instanceof Error ? error.message : 'sync_failed' })
+      }
+    }
+    return response({ ok: true, count: results.length, results }, 200, origin, env)
+  }
+
   if (url.pathname === '/system/dispatch-due' && request.method === 'POST') {
     const token = request.headers.get('x-dispatch-secret') ?? ''
     const { handleSystemDispatch } = await import('./worker-dispatch')
@@ -124,7 +148,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return response(result.body as Record<string, unknown>, 200, origin, env)
   }
 
-  const identity = await verifyIdentity(request, env)
+  const isInternal = !!env.DISPATCH_TOKEN && request.headers.get('x-internal-cron-secret') === env.DISPATCH_TOKEN
+  const identity = isInternal ? { id: '00000000-0000-0000-0000-000000000000' } : await verifyIdentity(request, env)
   if (!identity) return response({ error: 'Sign in to manage a mailbox.' }, 401, origin, env)
 
   try {
@@ -208,156 +233,38 @@ async function handle(request: Request, env: Env): Promise<Response> {
       const body = value as { organizationId?: unknown; mailboxId?: unknown }
       if (typeof body.organizationId !== 'string' || !uuidPattern.test(body.organizationId)) return response({ error: 'A valid workspace is required.' }, 400, origin, env)
       if (typeof body.mailboxId !== 'string' || !uuidPattern.test(body.mailboxId)) return response({ error: 'A valid mailbox is required.' }, 400, origin, env)
-      const membership = await getMembership(env, body.organizationId, identity.id)
-      if (!membership || !rolesAllowed.has(membership.role)) return response({ error: 'You do not have permission to sync a mailbox in this workspace.' }, 403, origin, env)
 
-      // Load mailbox account + encrypted credentials.
-      const accountUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/mailbox_accounts`)
-      accountUrl.searchParams.set('select', 'id,organization_id,owner_id,email_address,connection_state')
-      accountUrl.searchParams.set('id', `eq.${body.mailboxId}`)
-      accountUrl.searchParams.set('organization_id', `eq.${body.organizationId}`)
-      accountUrl.searchParams.set('limit', '1')
-      const accountRes = await fetch(accountUrl, { headers: serviceHeaders(env) })
-      if (!accountRes.ok) return response({ error: 'Mailbox could not be loaded.' }, 503, origin, env)
-      const accounts = await accountRes.json() as Array<{ id: string; organization_id: string; owner_id: string; email_address: string; connection_state: string }>
-      const account = accounts[0]
-      if (!account) return response({ error: 'Mailbox not found.' }, 404, origin, env)
-      if (account.owner_id !== identity.id && !['super_admin', 'sales_manager'].includes(membership.role)) {
-        return response({ error: 'You do not own this mailbox.' }, 403, origin, env)
+      const isInternal = !!env.DISPATCH_TOKEN && request.headers.get('x-internal-cron-secret') === env.DISPATCH_TOKEN
+      let membership: Membership | null = null
+      if (!isInternal) {
+        const maybe = await getMembership(env, body.organizationId, identity.id)
+        if (!maybe || !rolesAllowed.has(maybe.role)) return response({ error: 'You do not have permission to sync a mailbox in this workspace.' }, 403, origin, env)
+        membership = maybe
+      } else {
+        membership = { role: 'super_admin' }
       }
 
-      const credUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/mailbox_credential_refs`)
-      credUrl.searchParams.set('select', 'key_version,nonce,credential_ciphertext')
-      credUrl.searchParams.set('mailbox_account_id', `eq.${body.mailboxId}`)
-      credUrl.searchParams.set('limit', '1')
-      const credRes = await fetch(credUrl, { headers: serviceHeaders(env) })
-      if (!credRes.ok) return response({ error: 'Mailbox credentials could not be loaded.' }, 503, origin, env)
-      const creds = await credRes.json() as Array<{ key_version: string; nonce: string; credential_ciphertext: string }>
-      const cred = creds[0]
-      if (!cred) return response({ error: 'Mailbox credentials are missing.' }, 404, origin, env)
-
-      let password: string
-      try {
-        password = await decryptCredentials(env, account.organization_id, account.email_address, { key_version: cred.key_version, nonce: cred.nonce, ciphertext: cred.credential_ciphertext })
-      } catch (error) {
-        return response({ error: 'Mailbox credentials could not be decrypted.', code: error instanceof Error ? error.message : 'unknown' }, 503, origin, env)
-      }
-
-      let folders: Array<{ name: string; specialUse?: string }> = []
-      try {
-        folders = await listImapFolders(account.email_address, password)
-      } catch (error) {
-        return response({ error: 'Mailbox folder discovery failed.', code: error instanceof Error ? error.message : 'unknown' }, 422, origin, env)
-      }
-
-      // Ensure folder rows exist and report cursors.
-      const folderRows: Array<{ provider_folder_id: string; display_name: string; highest_synced_uid: number; sync_state: string }> = []
-      for (const folder of folders) {
-        const folderQuery = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/mailbox_folders`)
-        folderQuery.searchParams.set('select', 'id')
-        folderQuery.searchParams.set('mailbox_account_id', `eq.${body.mailboxId}`)
-        folderQuery.searchParams.set('provider_folder_id', `eq.${folder.name}`)
-        folderQuery.searchParams.set('limit', '1')
-        const existingRes = await fetch(folderQuery, { headers: serviceHeaders(env) })
-        const existing = existingRes.ok ? await existingRes.json() as Array<{ id: string }> : []
-        const payload = { mailbox_account_id: body.mailboxId, provider_folder_id: folder.name, display_name: folder.name, special_use: folder.specialUse ?? null, sync_state: 'healthy' }
-        const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/mailbox_folders`
-        const res = existing[0]
-          ? await fetch(`${url}?mailbox_account_id=eq.${body.mailboxId}&provider_folder_id=eq.${encodeURIComponent(folder.name)}`, { method: 'PATCH', headers: { ...serviceHeaders(env, true), Prefer: 'return=representation' }, body: JSON.stringify(payload) })
-          : await fetch(url, { method: 'POST', headers: { ...serviceHeaders(env, true), Prefer: 'return=representation' }, body: JSON.stringify(payload) })
-        if (!res.ok) throw new Error(`folder_write_${res.status}`)
-        const selectUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/mailbox_folders`)
-        selectUrl.searchParams.set('select', 'provider_folder_id,display_name,highest_synced_uid,sync_state')
-        selectUrl.searchParams.set('mailbox_account_id', `eq.${body.mailboxId}`)
-        selectUrl.searchParams.set('provider_folder_id', `eq.${folder.name}`)
-        selectUrl.searchParams.set('limit', '1')
-        const r = await fetch(selectUrl, { headers: serviceHeaders(env) })
-        const rows = r.ok ? await r.json() as Array<{ provider_folder_id: string; display_name: string; highest_synced_uid: number; sync_state: string }> : []
-        if (rows[0]) folderRows.push(rows[0])
-      }
-
-      const inbox = folders.find(folder => folder.specialUse === 'inbox')
-        ?? folders.find(folder => folder.name.toLowerCase() === 'inbox')
-        ?? folders[0]
-      let synchronizedMessages = 0
-      let hasMore = false
-
-      if (inbox) {
-        const cursor = folderRows.find(folder => folder.provider_folder_id === inbox.name)?.highest_synced_uid ?? 0
-        const search = await searchImapUids(account.email_address, password, inbox.name, Number(cursor), 5)
-        hasMore = search.hasMore
-        const fetched = await fetchImapMessages(account.email_address, password, inbox.name, search.uids)
-
-        for (const item of fetched) {
-          const parsed = await PostalMime.parse(item.raw, {
-            maxHeadersSize: 64 * 1024,
-            maxNestingDepth: 20,
-          })
-          const mapped = mapParsedEmail(parsed, {
-            organizationId: account.organization_id,
-            mailboxId: body.mailboxId,
-            folderProviderId: inbox.name,
-            uid: item.uid,
-          })
-          await rpc<string>(env, 'persist_inbound_message', {
-            target_organization: account.organization_id,
-            target_mailbox: body.mailboxId,
-            target_folder_provider_id: inbox.name,
-            target_folder_name: inbox.name,
-            target_special_use: inbox.specialUse ?? null,
-            target_uid: item.uid,
-            target_thread_provider_id: mapped.threadProviderId,
-            target_provider_message_key: mapped.providerMessageKey,
-            target_rfc_message_id: mapped.message.rfc_message_id,
-            target_in_reply_to: mapped.message.in_reply_to,
-            target_references: mapped.message.references_header,
-            target_subject: mapped.message.subject,
-            target_snippet: mapped.message.snippet,
-            target_text_body: mapped.message.text_body,
-            target_html_body: mapped.message.html_body,
-            target_received_at: mapped.message.received_at,
-            target_raw_headers: mapped.message.raw_headers,
-            target_participants: mapped.participants,
-            target_attachments: mapped.attachments,
-          })
-          await stopEnrollmentsForReply(env, account.organization_id, mapped.participants, mapped.message.in_reply_to, mapped.message.references_header, mapped.message.subject ?? null, mapped.message.text_body ?? null)
-           await processBounceMessage(env, account.organization_id, mapped.participants, mapped.message.subject, (mapped.message as {raw_headers?:unknown}).raw_headers)
-          synchronizedMessages += 1
-        }
-
-        if (search.uids.length === 0) {
-          await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/mailbox_folders?mailbox_account_id=eq.${body.mailboxId}&provider_folder_id=eq.${encodeURIComponent(inbox.name)}`, {
-            method: 'PATCH',
-            headers: { ...serviceHeaders(env, true), Prefer: 'return=minimal' },
-            body: JSON.stringify({ last_synced_at: new Date().toISOString(), sync_state: 'healthy', last_error_code: null }),
-          })
+      if (!isInternal) {
+        const ownerCheckUrl = new URL(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/mailbox_accounts`)
+        ownerCheckUrl.searchParams.set('select', 'owner_id')
+        ownerCheckUrl.searchParams.set('id', `eq.${body.mailboxId}`)
+        ownerCheckUrl.searchParams.set('organization_id', `eq.${body.organizationId}`)
+        ownerCheckUrl.searchParams.set('limit', '1')
+        const ownerRes = await fetch(ownerCheckUrl, { headers: serviceHeaders(env) })
+        const ownerRows = ownerRes.ok ? await ownerRes.json() as Array<{ owner_id: string }> : []
+        const owner = ownerRows[0]?.owner_id
+        if (owner && owner !== identity.id && !['super_admin', 'sales_manager'].includes(membership.role)) {
+          return response({ error: 'You do not own this mailbox.' }, 403, origin, env)
         }
       }
 
-      const mailboxUpdate = await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/mailbox_accounts?id=eq.${body.mailboxId}`, {
-        method: 'PATCH',
-        headers: { ...serviceHeaders(env, true), Prefer: 'return=minimal' },
-        body: JSON.stringify({ last_sync_at: new Date().toISOString(), connection_state: 'connected' }),
-      })
-      if (!mailboxUpdate.ok) throw new Error(`mailbox_update_${mailboxUpdate.status}`)
-
-      // Reconcile any enrollments whose contacts have inbound replies that haven't been processed yet.
       try {
-        await reconcileReplyStoppedEnrollments(env, body.organizationId, body.mailboxId)
-      } catch (reconcileError) {
-        console.error('REPLY_RECONCILE_ERROR', reconcileError)
+        const result = await runMailboxSync(env, body.organizationId, body.mailboxId as string)
+        return response(result, 200, origin, env)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'sync_failed'
+        return response({ error: message }, 503, origin, env)
       }
-
-      return response({
-        ok: true,
-        mailboxId: body.mailboxId,
-        folders: folderRows,
-        synchronizedMessages,
-        hasMore,
-        message: hasMore
-          ? `Synchronized ${synchronizedMessages} messages. More messages are available for the next batch.`
-          : `Synchronized ${synchronizedMessages} messages.`,
-      }, 200, origin, env)
     }
 
     if (url.pathname === '/mailboxes/test-send') {
@@ -452,6 +359,14 @@ export default {
       (async () => {
         const token = env.DISPATCH_TOKEN ?? ''
         if (!token) return
+        // sync inbound every 5 minutes: ensures replies/bounces are detected even when no browser is open
+        try {
+          const sync = await fetch('http://127.0.0.1:8787/system/mailbox-sync-all', {
+            method: 'POST',
+            headers: { 'x-dispatch-secret': token, 'content-type': 'application/json' },
+          })
+          console.log('SYSTEM_MAILBOX_SYNC_RESULT', sync.status, await sync.text().catch(() => ''))
+        } catch (error) { console.error('SYSTEM_MAILBOX_SYNC_FAILED', error) }
         try {
           const result = await fetch('http://127.0.0.1:8787/system/dispatch-due', {
             method: 'POST',
