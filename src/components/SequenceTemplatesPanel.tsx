@@ -30,7 +30,7 @@ export type SequenceTemplateStep = {
   time_zone_policy: string
 }
 
-const defaultDraft = { name: '', description: '', category: 'sales', industry: '', language: '', steps: [] as Array<Partial<SequenceTemplateStep> & { delayDays: string; delayHrs: string; delayMin: string }> }
+const defaultDraft = { name: '', description: '', category: 'sales', industry: '', language: '', steps: [] as Array<Partial<SequenceTemplateStep> & { delayDays: string; delayTime: string }> }
 
 export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; canWrite: boolean }) {
   const [orgId, setOrgId] = useState('')
@@ -82,7 +82,7 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
   function startEdit(template: SequenceTemplate) {
     setEditing(template)
     const tmplSteps = steps.filter(s => s.template_id === template.id).sort((a, b) => a.position - b.position)
-    setDraft({ name: template.name, description: template.description ?? '', category: template.category, industry: template.industry ?? '', language: template.language ?? '', steps: tmplSteps.map(s => ({ ...s, delayDays: String(Math.floor((s.delay_minutes ?? 0) / 1440)), delayHrs: String(Math.floor(((s.delay_minutes ?? 0) % 1440) / 60)), delayMin: String((s.delay_minutes ?? 0) % 60) })) })
+    setDraft({ name: template.name, description: template.description ?? '', category: template.category, industry: template.industry ?? '', language: template.language ?? '', steps: tmplSteps.map(s => ({ ...s, delayDays: String(Math.floor((s.delay_minutes ?? 0) / 1440)), delayTime: `${String(Math.floor(((s.delay_minutes ?? 0) % 1440) / 60)).padStart(2, '0')}:${String((s.delay_minutes ?? 0) % 60).padStart(2, '0')}` })) })
     setError('')
     setMessage('')
     setOpenId(template.id)
@@ -108,6 +108,9 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
         await supabase!.from('sequence_template_steps').delete().eq('template_id', templateId)
       }
       for (const [index, step] of draft.steps.entries()) {
+        const [hourRaw = '0', minuteRaw = '0'] = (step.delayTime ?? '00:00').split(':')
+        const hour = Math.min(23, Math.max(0, Number(hourRaw) || 0))
+        const minute = Math.min(59, Math.max(0, Number(minuteRaw) || 0))
         const inserted = await supabase!.from('sequence_template_steps').insert({
           template_id: templateId,
           position: index,
@@ -115,7 +118,7 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
           subject: step.subject ?? '',
           html_body: step.html_body ?? '',
           text_body: step.text_body ?? '',
-          delay_minutes: Math.round((Number(step.delayDays ?? 0) * 1440) + (Number(step.delayHrs ?? 0) * 60) + (Number(step.delayMin ?? 0))) || 0,
+          delay_minutes: Math.round((Number(step.delayDays ?? 0) * 1440) + (hour * 60) + minute) || 0,
           delay_unit: 'days',
           business_days_only: !!step.business_days_only,
           time_zone_policy: step.time_zone_policy || 'contact',
@@ -182,7 +185,7 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
         <td><button className="text-action" type="button" onClick={() => startEdit(template)}>{template.name}</button>{template.description && <><br /><small>{template.description}</small></>}</td>
         <td>{stepsFor(template.id).length}</td>
         <td>{durationDays(template.id)} day(s)</td>
-        <td>{template.category}</td>
+        <td>{template.industry || '—'}</td>
         <td className="row-actions"><button className="archive-button" type="button" onClick={() => setDeleteTarget(template)}>Cancel</button></td>
       </tr>)}</tbody>
     </table></div> : <div className="table-message">No sequence templates yet. Create one to reuse across B2B outreach.</div>}
@@ -200,15 +203,16 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
         <ol className="template-steps">
           {draft.steps.map((step, index) => <li key={index} className="template-step">
             <GripVertical size={15} aria-hidden="true" />
-            <div className="template-step-head"><b>Step {index + 1}</b><small>{index === 0 ? 'Day 1' : `After ${step.delayDays ?? '0'} day(s)`}</small></div>
+            <div className="template-step-head"><b>Step {index + 1}</b><small>{index === 0 ? 'Day 1' : `After ${step.delayDays ?? '0'} day(s)`}{step.delayTime ? ` · ${step.delayTime}` : ''}</small></div>
             <div className="template-step-fields">
               <label>Subject<input value={step.subject ?? ''} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, subject: e.target.value } : s) }))} placeholder="A possible opportunity for {{company}}" /></label>
               <label>HTML body<textarea rows={4} value={step.html_body ?? ''} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, html_body: e.target.value } : s) }))} placeholder="<p>Hi {{first_name}},</p>" /></label>
               <label>Text body<textarea rows={3} value={step.text_body ?? ''} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, text_body: e.target.value } : s) }))} placeholder="Hi {{first_name}}," /></label>
               <div className="template-step-meta">
-                <label>Wait (days)<input inputMode="numeric" value={step.delayDays ?? '0'} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, delayDays: e.target.value } : s) }))} /></label>
-                <label>Hour<input inputMode="numeric" value={step.delayHrs ?? '0'} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, delayHrs: e.target.value } : s) }))} /></label>
-                <label>Minute<input inputMode="numeric" value={step.delayMin ?? '0'} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, delayMin: e.target.value } : s) }))} /></label>
+              <div className="template-step-timing">
+                <label>Wait (days)<input inputMode="numeric" type="number" min={0} max={3650} value={step.delayDays ?? '0'} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, delayDays: e.target.value } : s) }))} /></label>
+                <label>Send at<input type="time" value={step.delayTime ?? '09:00'} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, delayTime: e.target.value } : s) }))} /></label>
+              </div>
                 <label className="checkbox-label"><input type="checkbox" checked={!!step.business_days_only} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, business_days_only: e.target.checked } : s) }))} /> Business days</label>
                 <button className="secondary-button" type="button" onClick={() => setPreviewIdx(index)}><Mail size={13} /> Preview</button>
                 <button className="icon-only" type="button" aria-label="Remove step" onClick={() => setDraft(current => ({ ...current, steps: current.steps.filter((_, i) => i !== index) }))}><Trash2 size={15} /></button>
@@ -217,7 +221,7 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
           </li>)}
         </ol>
         <div className="slideout-actions">
-          <button className="secondary-button" type="button" onClick={() => setDraft(current => ({ ...current, steps: [...current.steps, { kind: 'email', subject: '', html_body: '', text_body: '', delayDays: '3', delayHrs: '0', delayMin: '0', business_days_only: true, time_zone_policy: 'contact' }] }))}><Plus size={15} /> Add step</button>
+          <button className="secondary-button" type="button" onClick={() => setDraft(current => ({ ...current, steps: [...current.steps, { kind: 'email', subject: '', html_body: '', text_body: '', delayDays: '3', delayTime: '09:00', business_days_only: true, time_zone_policy: 'contact' }] }))}><Plus size={15} /> Add step</button>
         </div>
         {error && <p className="inline-error">{error}</p>}
         <div className="slideout-actions">
