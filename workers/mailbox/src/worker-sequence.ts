@@ -288,6 +288,16 @@ export async function sendSequenceStep(env: Env, input: { organizationId: string
   } catch (error) {
     const code = error instanceof MailboxProtocolError ? error.code : 'send_failed'
     const now = new Date().toISOString()
+
+    // Count previous failures for this exact step to drive backoff + give up
+    // after a bounded number of attempts instead of bouncing on the first error.
+    let priorFailures = 0
+    try {
+      const prior = await rest<Array<{ id: string }>>(env, `send_attempts?select=id&enrollment_id=eq.${enrollment.id}&sequence_step_id=eq.${step.id}&status=eq.failed&limit=25`)
+      priorFailures = prior.length
+    } catch (countError) { console.error('SEND_ATTEMPT_COUNT_FAILED', countError) }
+    const attempt = priorFailures + 1
+
     try {
       await rest(env, 'send_attempts', {
         method: 'POST',
@@ -306,11 +316,43 @@ export async function sendSequenceStep(env: Env, input: { organizationId: string
         }),
       })
     } catch (persistError) { console.error('SEND_ATTEMPT_FAIL_INSERT_FAILED', persistError) }
+
+    const MAX_ATTEMPTS = 5
+    const authFailure = code === 'smtp_authentication_failed' || code === 'smtp_auth_not_supported'
+    const terminal = authFailure || attempt >= MAX_ATTEMPTS
+
+    if (terminal) {
+      const state = authFailure ? 'paused' : 'failed'
+      const stopReason = authFailure ? 'mailbox_auth_failed' : 'execution_failed'
+      try {
+        await rest(env, `sequence_enrollments?id=eq.${enrollment.id}`, {
+          method: 'PATCH',
+          headers: { Prefer: 'return=minimal', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state, stopped_at: now, stop_reason: stopReason, next_run_at: null }),
+        })
+        await rest(env, 'activity_events', {
+          method: 'POST',
+          headers: { Prefer: 'return=minimal', 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            organization_id: enrollment.organization_id,
+            contact_id: contact.id,
+            event_type: 'sequence_email_failed',
+            summary: `Failed step ${step.position + 1} of sequence for ${firstName} ${lastName} (${code})${attempt > 1 ? ` after ${attempt} attempts` : ''}`.trim(),
+            source: 'worker.sequence_send',
+          }),
+        })
+      } catch (persistError) { console.error('ENROLLMENT_FAIL_UPDATE_FAILED', persistError) }
+      return { ok: false, status: 422, error: 'Email could not be sent.', code }
+    }
+
+    // Transient failure — keep the enrollment active and back off: 5, 10, 20, 40… min (max 12h)
+    const delayMinutes = Math.min(2 ** (attempt - 1) * 5, 12 * 60)
+    const nextRun = new Date(Date.now() + delayMinutes * 60_000).toISOString()
     try {
       await rest(env, `sequence_enrollments?id=eq.${enrollment.id}`, {
         method: 'PATCH',
         headers: { Prefer: 'return=minimal', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: 'bounced', stopped_at: now, stop_reason: 'email_bounce', next_run_at: null, error_code: code }),
+        body: JSON.stringify({ next_run_at: nextRun }),
       })
       await rest(env, 'activity_events', {
         method: 'POST',
@@ -318,13 +360,13 @@ export async function sendSequenceStep(env: Env, input: { organizationId: string
         body: JSON.stringify({
           organization_id: enrollment.organization_id,
           contact_id: contact.id,
-          event_type: 'sequence_email_bounced',
-          summary: `Bounced step ${step.position + 1} of sequence for ${firstName} ${lastName} (${code})`.trim(),
+          event_type: 'sequence_email_retry',
+          summary: `Step ${step.position + 1} failed (${code}) — retry ${attempt}/${MAX_ATTEMPTS} in ${delayMinutes} min`.trim(),
           source: 'worker.sequence_send',
         }),
       })
-    } catch (persistError) { console.error('ENROLLMENT_BOUNCE_UPDATE_FAILED', persistError) }
-    return { ok: false, status: 422, error: 'Email could not be sent.', code }
+    } catch (persistError) { console.error('ENROLLMENT_RETRY_UPDATE_FAILED', persistError) }
+    return { ok: false, status: 429, error: `Email could not be sent. Will retry in ${delayMinutes} minutes.`, code }
   }
 
   const now = new Date().toISOString()

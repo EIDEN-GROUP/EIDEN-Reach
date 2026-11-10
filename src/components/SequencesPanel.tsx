@@ -22,6 +22,38 @@ type TemplateInfo = { id: string; name: string; subject: string; html_body: stri
 
 const SEQUENCE_COLUMNS = 'id,name,description,status,category,current_version,daily_limit,archived_at,sender_mailbox_id,source_template_id,industry'
 
+/** Friendly labels for failure / stop reasons (sequence send engine + worker). */
+const FAILURE_LABELS: Record<string, string> = {
+  smtp_connection_failed: 'Mail server unreachable',
+  smtp_authentication_failed: 'SMTP password rejected',
+  smtp_tls_failed: 'SMTP TLS handshake failed',
+  smtp_auth_not_supported: 'SMTP auth method not supported',
+  connection_timeout: 'Connection timed out',
+  send_failed: 'Send failed',
+  credentials_decrypt_failed: 'Stored credentials unreadable',
+  sequence_not_active: 'Sequence is archived or inactive',
+  mailbox_not_connected: 'Sender mailbox disconnected',
+  mailbox_auth_failed: 'Mailbox sign-in rejected',
+  no_email: 'Contact has no email address',
+  no_sender_mailbox: 'Sequence has no sender mailbox',
+  no_template: 'Step template missing',
+  not_email: 'Step is not an email step',
+  execution_failed: 'Send failed — retries exhausted',
+  email_bounce: 'Bounced',
+  manual_stop: 'Manually stopped',
+  unsubscribe: 'Unsubscribed',
+  sequence_archived: 'Sequence archived',
+}
+function reasonLabel(reason: string | null | undefined): string | undefined {
+  if (!reason) return undefined
+  const label = FAILURE_LABELS[reason] ?? reason.replaceAll('_', ' ')
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+function failureLabel(code: string | undefined): string | undefined {
+  if (!code) return undefined
+  return FAILURE_LABELS[code] ?? code.replaceAll('_', ' ')
+}
+
 export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite: boolean }) {
   const [orgId, setOrgId] = useState('')
   const [sequences, setSequences] = useState<Sequence[]>([])
@@ -31,6 +63,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
   const [selectedId, setSelectedId] = useState('')
   const [steps, setSteps] = useState<Step[]>([])
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
+  const [lastErrors, setLastErrors] = useState<Record<string, string>>({})
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
   const [contacts, setContacts] = useState<Contact[]>([])
   const [kpis, setKpis] = useState<SequenceKpis | null>(null)
@@ -118,8 +151,24 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     return () => { active = false }
   }, [selectedId, sequences])
 
+  async function fetchLastErrors(ids: string[]): Promise<Record<string, string>> {
+    if (!ids.length) return {}
+    const result = await supabase!.from('send_attempts')
+      .select('enrollment_id,error_code,created_at')
+      .in('enrollment_id', ids.slice(0, 500))
+      .eq('status', 'failed')
+      .order('created_at', { ascending: false })
+      .limit(1000)
+    if (result.error) return {}
+    const map: Record<string, string> = {}
+    for (const row of (result.data ?? []) as Array<{ enrollment_id: string; error_code: string | null }>) {
+      if (row.enrollment_id && !map[row.enrollment_id]) map[row.enrollment_id] = row.error_code ?? 'send_failed'
+    }
+    return map
+  }
+
   useEffect(() => {
-    if (!selectedId) { setEnrollments([]); setKpis(null); return }
+    if (!selectedId) { setEnrollments([]); setLastErrors({}); setKpis(null); return }
     let active = true
     void (async () => {
       const result = await supabase!.from('sequence_enrollments')
@@ -131,6 +180,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       if (result.error) { setError('Enrollments could not be loaded.'); return }
       const rows = (result.data ?? []) as unknown as Enrollment[]
       setEnrollments(rows)
+      void fetchLastErrors(rows.map(r => r.id)).then(map => { if (active) setLastErrors(map) })
     })()
     return () => { active = false }
   }, [selectedId])
@@ -180,7 +230,11 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
           setDispatchNotice(`Auto-dispatch: ${res.claimed} due, ${res.succeeded} sent, ${res.retried} skipped, ${res.failed} failed`)
           if (selectedId) {
             const r = await supabase!.from('sequence_enrollments').select('id,contact_id,state,enrolled_at,next_step_position,next_run_at,stopped_at,stop_reason,contacts:contact_id(first_name,last_name,email)').eq('sequence_id', selectedId).order('enrolled_at', { ascending: false }).limit(500)
-            if (!r.error && r.data) setEnrollments((r.data as unknown as Enrollment[]))
+            if (!r.error && r.data && mounted) {
+              const next = r.data as unknown as Enrollment[]
+              setEnrollments(next)
+              void fetchLastErrors(next.map(row => row.id)).then(map => { if (mounted) setLastErrors(map) })
+            }
           }
         }
       } catch (err) {
@@ -294,7 +348,11 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
             setDispatchNotice('Auto-dispatch triggered (active): due emails processed.')
             if (selectedId) {
               const rr = await supabase!.from('sequence_enrollments').select('id,contact_id,state,enrolled_at,next_step_position,next_run_at,stopped_at,stop_reason,contacts:contact_id(first_name,last_name,email)').eq('sequence_id', selectedId).order('enrolled_at', { ascending: false }).limit(500)
-              if (!rr.error && rr.data) setEnrollments((rr.data as unknown as Enrollment[]))
+              if (!rr.error && rr.data) {
+                const next = rr.data as unknown as Enrollment[]
+                setEnrollments(next)
+                void fetchLastErrors(next.map(row => row.id)).then(setLastErrors)
+              }
             }
           } catch (e) {
             setDispatchNotice('Auto-dispatch error: ' + (e instanceof Error ? e.message : 'unknown'))
@@ -430,7 +488,11 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
         await dispatchDue(orgId, Math.min(10, added + 2))
         if (selectedId) {
           const r = await supabase!.from('sequence_enrollments').select('id,contact_id,state,enrolled_at,next_step_position,next_run_at,stopped_at,stop_reason,contacts:contact_id(first_name,last_name,email)').eq('sequence_id', selectedId).order('enrolled_at', { ascending: false }).limit(500)
-          if (!r.error && r.data) setEnrollments((r.data as unknown as Enrollment[]))
+          if (!r.error && r.data) {
+            const next = r.data as unknown as Enrollment[]
+            setEnrollments(next)
+            void fetchLastErrors(next.map(row => row.id)).then(setLastErrors)
+          }
         }
       } catch {}
     }
@@ -442,7 +504,8 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     const update: Record<string, unknown> = action === 'pause'
       ? { state: 'paused' }
       : action === 'resume'
-        ? { state: 'active' }
+        // Re-arm to now so the dispatcher picks it up again
+        ? { state: 'active', next_run_at: new Date().toISOString() }
         : { state: 'cancelled', stopped_at: new Date().toISOString(), stop_reason: 'manual_stop', next_run_at: null }
     const result = await supabase!.from('sequence_enrollments').update(update).eq('id', enrollment.id)
     if (result.error) { setError('Enrollment could not be updated.'); return }
@@ -450,7 +513,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       const contactName = (enrollment.contacts ? `${enrollment.contacts.first_name} ${enrollment.contacts.last_name}` : 'contact').trim()
       await supabase!.from('activity_events').insert({ organization_id: orgId, contact_id: enrollment.contact_id, event_type: 'sequence_stop', summary: `Sequence stopped manually for ${contactName}`, source: 'sequences.panel' })
     }
-    setEnrollments(current => current.map(row => row.id === enrollment.id ? { ...row, ...(action === 'pause' ? { state: 'paused' } : action === 'resume' ? { state: 'active' } : { state: 'cancelled', stopped_at: new Date().toISOString(), stop_reason: 'manual_stop', next_run_at: null }) } : row))
+    setEnrollments(current => current.map(row => row.id === enrollment.id ? { ...row, ...(action === 'pause' ? { state: 'paused' } : action === 'resume' ? { state: 'active', next_run_at: new Date().toISOString() } : { state: 'cancelled', stopped_at: new Date().toISOString(), stop_reason: 'manual_stop', next_run_at: null }) } : row))
   }
 
   async function sendNow(enrollment: Enrollment) {
@@ -491,6 +554,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
       case 'completed': return 'status-chip status-chip-completed'
       case 'unsubscribed': return 'status-chip status-chip-unsubscribed'
       case 'bounced': return 'status-chip status-chip-bounced'
+      case 'failed': return 'status-chip status-chip-unsubscribed'
       case 'cancelled': return 'status-chip status-chip-bounced'
       default: return 'status-chip'
     }
@@ -503,6 +567,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     paused: enrollments.filter(e => e.state === 'paused').length,
     completed: enrollments.filter(e => e.state === 'completed').length,
     bounced: enrollments.filter(e => e.state === 'bounced' || e.stop_reason === 'hard_bounce').length,
+    failed: enrollments.filter(e => e.state === 'failed' || e.stop_reason === 'execution_failed' || e.stop_reason === 'mailbox_auth_failed').length,
   }
 
   useEffect(() => {
@@ -653,6 +718,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
             <div className="stat-tile"><span>Replied</span><b>{enrollmentSummary.replied}</b></div>
             <div className="stat-tile"><span>Paused</span><b>{enrollmentSummary.paused}</b></div>
             <div className="stat-tile"><span>Bounced</span><b>{enrollmentSummary.bounced}</b></div>
+            <div className="stat-tile"><span>Failed</span><b>{enrollmentSummary.failed}</b></div>
             <div className="stat-tile"><span>Completed</span><b>{enrollmentSummary.completed}</b></div>
             <div className="stat-tile"><span>Total</span><b>{enrollmentSummary.total}</b></div>
           </div>
@@ -666,7 +732,7 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
                 <td><span className={stateClass(enrollment.state)}>{enrollment.state.replace('_', ' ')}</span></td>
                 <td>{new Date(enrollment.enrolled_at).toLocaleString()}</td>
                 <td>{enrollment.next_run_at ? new Date(enrollment.next_run_at).toLocaleString() : 'â€”'}</td>
-                <td>{enrollment.stop_reason ?? 'â€”'}</td>
+                <td>{reasonLabel(enrollment.stop_reason) ?? failureLabel(lastErrors[enrollment.id]) ?? '—'}</td>
                 <td className="row-actions">
                   {canWrite && enrollment.state === 'active' && <button className="icon-only" title="Pause enrollment" aria-label="Pause enrollment" onClick={() => void enrollmentAction(enrollment, 'pause')}><Pause size={15} /></button>}
                   {canWrite && enrollment.state === 'paused' && <button className="icon-only" title="Resume enrollment" aria-label="Resume enrollment" onClick={() => void enrollmentAction(enrollment, 'resume')}><Play size={15} /></button>}
