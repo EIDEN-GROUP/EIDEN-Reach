@@ -308,11 +308,7 @@ export function InboxPanel({ userId, canConnect }: { userId: string; canConnect:
   const credentialsReady = serviceConfigured && Boolean(organizationId) && Boolean(email) && Boolean(password) && busy === null
 
   return <section className="inbox-page">
-    <header className="inbox-head">
-      <div>
-        <h2>Inbox</h2>
-        <p>Read synchronized conversations from your connected mailboxes.</p>
-      </div>
+    <header className="inbox-head inbox-head-actions-only">
       <div className="inbox-head-actions">
         <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={busy !== null || loading}><RefreshCw size={15} /> Refresh</button>
         {canConnect && <button className="primary-button" type="button" onClick={() => { setConnectOpen(true); setMessage(''); setError('') }}><Plus size={15} /> Connect mailbox</button>}

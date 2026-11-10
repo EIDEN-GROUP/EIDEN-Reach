@@ -100,14 +100,14 @@ export function AnalyticsPanel({ userId }: { userId: string }) {
   ] : []
 
   return <section className="panel contacts-panel">
-    <div className="panel-heading"><div><h2>Analytics</h2><p>Workspace performance from connected, verified data. Sequence KPIs use unique contacts where applicable.</p></div></div>
+    <div className="panel-heading"><div><h2>At a glance</h2><p>Contacts, deals, tasks and sequence performance — KPIs use unique contacts where applicable.</p></div></div>
     {error && <p className="inline-error" role="alert">{error}</p>}
     {loading ? <div className="table-message">Loading analytics...</div> : <>
       <div className="metric-grid">
         {[['Contacts', contacts], ['Companies', companies], ['Open deals', openDeals.length], ['Open value', formatValues(totalOpenValue)], ['Won deals', wonDeals.length], ['Won value', formatValues(totalWonValue)], ['Open tasks', tasksOpen], ['Tasks due', tasksDue], ['Activity events', activityCount]].map(([label, value]) => <div className="metric panel" key={String(label)}><span>{label}</span><strong>{value}</strong></div>)}
       </div>
       {kpis && <>
-        <h3 style={{ margin: '20px 0 8px' }}>Sequence KPIs</h3>
+        <h3 className="builder-title">Sequence KPIs</h3>
         <div className="metric-grid">{kpiCards.map(([label, value]) => <div className="metric panel" key={String(label)}><span>{label}</span><strong>{value}</strong></div>)}</div>
         {enrollments.length > 0 && <div className="contact-table-wrap" style={{ marginTop: 16 }}><table className="contact-table"><thead><tr><th>State</th><th>Count</th></tr></thead><tbody>{Array.from(new Set(enrollments.map(e => e.state))).sort().map(s => <tr key={s}><td>{s}</td><td>{enrollments.filter(e => e.state === s).length}</td></tr>)}</tbody></table></div>}
       </>}

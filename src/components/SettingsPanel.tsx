@@ -59,7 +59,11 @@ export function SettingsPanel({
     let active = true
     void (async () => {
       try {
-        await ensureProfile(userId)
+        // Only self-create the profile row when it's genuinely missing; the
+        // sign-up trigger normally creates it (and the authenticated role has
+        // no INSERT grant on profiles, so a blind upsert always fails).
+        const existing = await loadProfile(userId)
+        if (!existing) await ensureProfile(userId)
         const loaded = await loadProfile(userId)
         if (active) onProfileChange(loaded)
       } catch (caught) {
