@@ -4,6 +4,7 @@ import { Plus, Trash2, GripVertical, Mail } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CenterDialog } from './Overlay'
 import Typeahead from './DataList'
+import { RichTextArea } from './RichTextToolbar'
 
 import { LANGUAGES } from '../lib/localeData'
 
@@ -206,8 +207,15 @@ export function SequenceTemplatesPanel({ userId, canWrite }: { userId: string; c
             <div className="template-step-head"><b>Step {index + 1}</b><small>{index === 0 ? 'Day 1' : `After ${step.delayDays ?? '0'} day(s)`}{step.delayTime ? ` · ${step.delayTime}` : ''}</small></div>
             <div className="template-step-fields">
               <label>Subject<input value={step.subject ?? ''} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, subject: e.target.value } : s) }))} placeholder="A possible opportunity for {{company}}" /></label>
+              <RichTextArea
+                rows={5}
+                value={step.text_body ?? ''}
+                onChange={(next) => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, text_body: next } : s) }))}
+                placeholder="Hi {{first_name}},"
+                aria-label={`Text body for step ${index + 1}`}
+                label="Text body"
+              />
               <label>HTML body<textarea rows={4} value={step.html_body ?? ''} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, html_body: e.target.value } : s) }))} placeholder="<p>Hi {{first_name}},</p>" /></label>
-              <label>Text body<textarea rows={3} value={step.text_body ?? ''} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, text_body: e.target.value } : s) }))} placeholder="Hi {{first_name}}," /></label>
               <div className="template-step-meta">
               <div className="template-step-timing">
                 <label>Wait (days)<input inputMode="numeric" type="number" min={0} max={3650} value={step.delayDays ?? '0'} onChange={e => setDraft(current => ({ ...current, steps: current.steps.map((s, i) => i === index ? { ...s, delayDays: e.target.value } : s) }))} /></label>

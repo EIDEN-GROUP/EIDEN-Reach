@@ -651,6 +651,33 @@ img.brand-mark { object-fit: contain; background: none; border-radius: 0; }
 .row-enrolled { opacity:.55; background: repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(128,128,128,.09) 8px, rgba(128,128,128,.09) 16px); }
 .row-enrolled input { cursor:not-allowed; }
 
+/* ── Rich text toolbar (sequence template Text body) ──────────────── */
+.rich-toolbar { position: relative; display: grid; gap: 0; background: var(--surface-raised); border: 1px solid var(--line-input); border-radius: var(--radius-md); transition: border-color 120ms ease, box-shadow 120ms ease; }
+.rich-toolbar:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus); }
+.rich-toolbar__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 5px 6px; border-bottom: 1px solid var(--line); }
+.rich-toolbar__group { display: flex; align-items: center; gap: 2px; }
+.rich-toolbar__separator { width: 1px; height: 18px; margin: 0 6px; background: var(--line); }
+.rich-toolbar__button { display: grid; place-items: center; width: 30px; height: 30px; color: var(--muted); background: transparent; border: 0; border-radius: var(--radius-sm); cursor: pointer; transition: background-color 120ms ease, color 120ms ease; }
+.rich-toolbar__button:hover { color: var(--ink); background: var(--sunken); }
+.rich-toolbar__button:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--focus); }
+.rich-toolbar__button--format { display: inline-flex; gap: 2px; width: auto; padding: 0 6px; }
+.rich-toolbar__textarea { width: 100%; min-height: 168px; padding: 12px 14px; color: var(--ink); background: var(--surface-raised); border: 0; border-radius: 0 0 var(--radius-md) var(--radius-md); font-family: inherit; font-size: 14px; line-height: 1.6; resize: vertical; }
+.rich-toolbar__textarea:focus { outline: 0; }
+.rich-toolbar__label { min-width: 0; display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 550; margin-bottom: 5px; }
+.rich-toolbar__popover { position: absolute; top: calc(100% + 8px); left: 6px; z-index: 40; display: grid; gap: 8px; width: 280px; padding: 10px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-pop); }
+.rich-toolbar__popover-label { color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+.rich-toolbar__popover input { width: 100%; min-height: 34px; padding: 6px 10px; color: var(--ink); background: var(--surface-raised); border: 1px solid var(--line-input); border-radius: var(--radius-sm); font-size: 13px; }
+.rich-toolbar__popover input:focus { outline: 0; border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus); }
+.rich-toolbar__popover-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.rich-toolbar__popover--menu { width: 210px; padding: 6px; gap: 2px; }
+.rich-toolbar__menu-item { display: flex; width: 100%; padding: 8px 10px; color: var(--ink); background: transparent; border: 0; border-radius: var(--radius-sm); font-family: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.rich-toolbar__menu-item:hover { background: var(--subtle); }
+.rich-toolbar__menu-item:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--focus); }
+.rich-toolbar__menu-item[data-level='h1'] { font-size: 16px; font-weight: 700; }
+.rich-toolbar__menu-item[data-level='h2'] { font-size: 14px; font-weight: 650; }
+.rich-toolbar__menu-item[data-level='h3'] { font-size: 13px; font-weight: 600; }
+.rich-toolbar__menu-item[data-level='normal'] { color: var(--muted); }
+
 /* KPI stat tiles (auto-fit so they wrap on small screens) */
 .stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
 
