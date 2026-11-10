@@ -9,7 +9,7 @@ import {
 } from './protocols'
 import { mapParsedEmail } from './mail-mapping'
 import { parseMailboxInput, type MailboxInput } from './input'
-import { stopEnrollmentsForReply, reconcileReplyStoppedEnrollments, processBounceMessage, notifySlack } from './worker-reply'
+import { stopEnrollmentsForReply, reconcileReplyStoppedEnrollments, processBounceMessage } from './worker-reply'
 import { decodeBase64, decryptCredentials, encryptCredentials } from './worker-crypto'
 import { handleUnsubscribe, sendSequenceStep, unsubscribeConfirmationHtml } from './worker-sequence'
 import { handleSystemDispatch } from './worker-dispatch'
@@ -215,15 +215,17 @@ async function handle(request: Request, env: Env): Promise<Response> {
       let succeeded = 0, retried = 0, failed = 0, results: Array<{ id: string; ok: boolean; error?: string }> = []
       for (const item of due) {
         const result = await sendSequenceStep(env, { organizationId: body.organizationId, enrollmentId: item.id, actorId: identity.id })
+        // Configuration states (archived sequence, no sender, not an email step, bad address)
+        // are not send failures — don't bounce Slack or KPIs on them.
+        const skippedCodes = new Set(['suppressed', 'no_due_step', 'not_active', 'no_template', 'sequence_not_active', 'no_sender_mailbox', 'mailbox_not_connected', 'no_email', 'not_email'])
         if (result.ok) { succeeded += 1 }
-        else if (result.code === 'suppressed' || result.code === 'no_due_step' || result.code === 'not_active' || result.code === 'no_template') {
+        else if (result.code && skippedCodes.has(result.code)) {
           retried += 1
         } else { failed += 1 }
         results.push({ id: item.id, ok: result.ok, error: result.ok ? undefined : `${result.error}${result.code ? ' (' + result.code + ')' : ''}` })
       }
-      if (due.length > 0) {
-        try { await notifySlack(typeof env.SLACK_WEBHOOK_URL === 'string' ? env.SLACK_WEBHOOK_URL : undefined, `Campaign dispatch by ${identity.email ?? identity.id} on workspace ${body.organizationId}: claimed ${due.length}, sent ${succeeded}, skipped ${retried}, failed ${failed}.`) } catch (notifyError) { console.error('DISPATCH_SLACK_FAILED', notifyError) }
-      }
+      // No Slack ping per dispatch — it fired on every browser visit and re-click, which spammed the channel.
+      // Per-item outcomes are returned in `results` for the UI instead.
       return response({ ok: true, claimed: due.length, succeeded, retried, failed, results, dispatched_at: nowSql() }, 200, origin, env)
     }
     if (url.pathname === '/mailboxes/sync') {
