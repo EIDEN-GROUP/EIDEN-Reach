@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { AuthSession } from '@supabase/supabase-js'
-import nodeworkLogo from './assets/nodework-logo-mark.png'
+import eidenReachMark from './assets/eiden-reach-mark.svg'
 import { SignIn } from './components/SignIn'
 import {
   Activity, BarChart3, CheckSquare,
@@ -135,13 +135,13 @@ export default function App() {
     return () => { window.clearInterval(interval) }
   }, [session?.user.id, backgroundOrganizationId])
 
-  if (databaseConfigured && authLoading) return <div className="auth-loading"><img className="auth-logo-dark" src={nodeworkLogo} alt="" aria-hidden="true" /><p>Checking your sign-in session…</p></div>
+  if (databaseConfigured && authLoading) return <div className="auth-loading"><img className="auth-logo-dark" src={eidenReachMark} alt="" aria-hidden="true" /><p>Checking your sign-in session…</p></div>
   if (databaseConfigured && !session) return <SignIn notice={authNotice} />
 
   return <div className="app-shell">
     {menuOpen && <button className="scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
     <aside id="workspace-sidebar" className={`sidebar ${menuOpen ? 'sidebar-open' : ''}`}>
-      <div className="brand"><img className="brand-mark" src={nodeworkLogo} alt="" aria-hidden="true" /><div><strong>EIDEN Reach</strong><span>Sales workspace</span></div><button className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Close menu"><X size={18} /></button></div>
+      <div className="brand"><img className="brand-mark" src={eidenReachMark} alt="" aria-hidden="true" /><div><strong>EIDEN Reach</strong><span>Sales workspace</span></div><button className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Close menu"><X size={18} /></button></div>
       <div className="workspace"><span><b>{organizationName || 'Workspace'}</b><small>{memberRole ? memberRole.replaceAll('_', ' ') : 'No workspace membership'}</small></span></div>
       <nav aria-label="Main navigation" className="navigation">{sections.filter(section => section.title !== 'Administration' || ['super_admin', 'sales_manager'].includes(memberRole)).map((section) => <div className="nav-group" key={section.title} data-tone={sectionTone[section.title]}><div className="nav-label">{section.title}</div>{section.items.filter(([label]) => label !== 'Team & Audit' || ['super_admin', 'sales_manager'].includes(memberRole)).map(([label, Icon]) => <button key={label} className={`nav-item ${page === label ? 'active' : ''}`} onClick={() => { setPage(label); setMenuOpen(false) }}><Icon size={17} strokeWidth={1.8} /><span>{label}</span></button>)}</div>)}</nav>
       <div className="sidebar-bottom"><div className="connection"><span className={`connection-dot ${databaseConfigured ? 'ready' : ''}`} />{databaseConfigured ? 'Database configured' : 'Database setup needed'}</div><div className="profile"><ProfileAvatar path={profile?.avatar_path ?? null} label={profile?.display_name || session?.user.email || 'You'} /><span><b>{session?.user.email ?? 'EIDEN user'}</b><small>Signed in</small></span><button aria-label="Sign out" onClick={() => void supabase?.auth.signOut()}><X size={16} /></button></div></div>

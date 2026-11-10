@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { ArrowRight, Eye, EyeOff, Inbox, ShieldCheck, Workflow } from 'lucide-react'
-import nodeworkLogo from '../assets/nodework-logo-mark.png'
+import eidenReachMark from '../assets/eiden-reach-mark-on-dark.svg'
+import eidenReachMarkColor from '../assets/eiden-reach-mark.svg'
 import { supabase } from '../lib/supabase'
 
 const highlights = [
@@ -30,7 +31,7 @@ export function SignIn({ notice }: { notice?: string }) {
   return <main className="auth-page">
     <aside className="auth-aside">
       <div className="auth-brand">
-        <img className="auth-logo" src={nodeworkLogo} alt="" aria-hidden="true" />
+        <img className="auth-logo" src={eidenReachMark} alt="" aria-hidden="true" />
         <span>EIDEN Reach</span>
       </div>
       <div className="auth-pitch">
@@ -46,7 +47,7 @@ export function SignIn({ notice }: { notice?: string }) {
       <form className="auth-card" onSubmit={submit} noValidate={false}>
         {notice && <div className="auth-notice" role="status">{notice}</div>}
         <header className="auth-card-head">
-          <img className="auth-card-logo" src={nodeworkLogo} alt="" aria-hidden="true" />
+          <img className="auth-card-logo" src={eidenReachMarkColor} alt="" aria-hidden="true" />
           <h2>Sign in</h2>
           <p>Use the email your workspace administrator invited you with.</p>
         </header>

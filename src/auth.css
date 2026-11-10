@@ -4,7 +4,7 @@
 
 .auth-page { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, 480px); background: var(--canvas); }
 
-.auth-aside { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 40px; padding: 48px 56px; color: var(--primary-on); background: var(--primary); }
+.auth-aside { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 40px; padding: 48px 56px; color: var(--primary-on); background: #123E39; }
 .auth-aside::after { position: absolute; right: -120px; bottom: -140px; width: 420px; height: 420px; content: ""; border: 56px solid oklch(1 0 0 / 7%); border-radius: 50%; pointer-events: none; }
 .auth-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
 .auth-logo { width: 36px; height: 36px; object-fit: contain; background: oklch(1 0 0 / 14%); border-radius: 10px; padding: 4px; }
