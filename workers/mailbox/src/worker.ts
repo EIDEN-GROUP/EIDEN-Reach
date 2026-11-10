@@ -170,7 +170,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       return response({ mailboxes: await result.json() }, 200, origin, env)
     }
 
-    if (request.method !== 'POST' || !['/mailboxes/test', '/mailboxes', '/mailboxes/sync', '/mailboxes/test-send', '/sequences/send', '/sequences/dispatch-due'].includes(url.pathname)) {
+    if (request.method !== 'POST' || !['/mailboxes/test', '/mailboxes', '/mailboxes/sync', '/mailboxes/test-send', '/sequences/send', '/sequences/dispatch-due', '/sequences/complete-check'].includes(url.pathname)) {
       return response({ error: 'Not found.' }, 404, origin, env)
     }
     if (url.pathname === '/sequences/send') {
@@ -185,6 +185,20 @@ async function handle(request: Request, env: Env): Promise<Response> {
       const result = await sendSequenceStep(env, { organizationId: body.organizationId, enrollmentId: body.enrollmentId, actorId: identity.id })
       if (!result.ok) return response({ error: result.error, code: result.code }, result.status, origin, env)
       return response({ ok: true, enrollmentId: result.enrollmentId, contactEmail: result.contactEmail, stepPosition: result.stepPosition, unsubscribeUrl: result.unsubscribeUrl }, 200, origin, env)
+    }
+
+    if (url.pathname === '/sequences/complete-check') {
+      const rawText = await request.text()
+      let value: unknown = {}
+      if (rawText.trim()) try { value = JSON.parse(rawText) } catch { value = {} }
+      const body = value as { organizationId?: unknown; sequenceId?: unknown }
+      if (typeof body.organizationId !== 'string' || !uuidPattern.test(body.organizationId)) return response({ error: 'A valid workspace is required.' }, 400, origin, env)
+      if (typeof body.sequenceId !== 'string' || !uuidPattern.test(body.sequenceId)) return response({ error: 'A valid sequence is required.' }, 400, origin, env)
+      const membership = await getMembership(env, body.organizationId, identity.id)
+      if (!membership) return response({ error: 'You do not belong to this workspace.' }, 403, origin, env)
+      const { maybeNotifySequenceCompleted } = await import('./worker-completion')
+      await maybeNotifySequenceCompleted(env, { organizationId: body.organizationId, sequenceId: body.sequenceId })
+      return response({ ok: true }, 200, origin, env)
     }
 
     if (url.pathname === '/sequences/dispatch-due') {

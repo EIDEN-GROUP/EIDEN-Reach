@@ -1,18 +1,9 @@
 import type { Env } from './runtime'
 import { serviceHeaders } from './runtime'
+import { notifySlack } from './worker-slack'
+import { maybeNotifySequenceCompleted } from './worker-completion'
 
-export async function notifySlack(webhook: string | undefined, text: string): Promise<void> {
-  if (!webhook) return
-  try {
-    await fetch(webhook, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text }),
-    })
-  } catch (error) {
-    console.error('SLACK_NOTIFY_FAILED', error)
-  }
-}
+// notifySlack lives in ./worker-slack — import it there if you need it elsewhere.
 
 export async function processBounceMessage(env: Env, organizationId: string, participants: Array<{ participant_type: string; email_address: string }>, subject: string | null | undefined, rawHeaders: unknown): Promise<number> {
   try {
@@ -63,6 +54,9 @@ export async function processBounceMessage(env: Env, organizationId: string, par
         body: JSON.stringify({ state: 'bounced', stopped_at: now, stop_reason: 'email_bounce', next_run_at: null }),
       })
       if (!patchRes.ok) continue
+      for (const enrollment of enrollments) {
+        try { await maybeNotifySequenceCompleted(env, { organizationId, sequenceId: enrollment.sequence_id }) } catch (checkError) { console.error('COMPLETION_CHECK_FAILED', checkError) }
+      }
       for (const enrollment of enrollments) {
         await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/activity_events`, {
           method: 'POST',
@@ -163,6 +157,9 @@ async function stopEnrollmentsForContact(env: Env, organizationId: string, conta
     body: JSON.stringify({ state: classification === 'interested' ? 'interested' : 'replied', stopped_at: stoppedAt, stop_reason: classification === 'interested' ? 'reply_interested' : 'reply_received', next_run_at: null }),
   })
   if (!patchRes.ok) return 0
+  for (const enrollment of enrollments) {
+    try { await maybeNotifySequenceCompleted(env, { organizationId, sequenceId: enrollment.sequence_id }) } catch (checkError) { console.error('COMPLETION_CHECK_FAILED', checkError) }
+  }
 
   for (const enrollment of enrollments) {
     const insertRes = await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/activity_events`, {

@@ -94,4 +94,9 @@ export function dispatchDue(organizationId: string, limit = 5) {
   return request<{ ok: true; claimed: number; succeeded: number; retried: number; failed: number; dispatched_at: string; results: Array<{ id: string; ok: boolean; error?: string }> }>('/sequences/dispatch-due', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ organizationId, limit }) })
 }
 
+/** Fire-and-forget: asks the worker to post the sequence-completion Slack message if this stop made it the last one. */
+export function checkSequenceCompletion(organizationId: string, sequenceId: string): Promise<void> {
+  return request<{ ok: true }>('/sequences/complete-check', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ organizationId, sequenceId }) }).then(() => undefined).catch(() => undefined)
+}
+
 

@@ -2,6 +2,8 @@ import type { Env } from './runtime'
 import { serviceHeaders } from './runtime'
 import { decryptCredentials } from './worker-crypto'
 import { sendSmtpEmail, MailboxProtocolError } from './protocols'
+import { notifySlack } from './worker-slack'
+import { maybeNotifySequenceCompleted } from './worker-completion'
 
 function getBase(env: Env): string {
   return env.SUPABASE_URL.replace(/\/$/, '')
@@ -24,16 +26,6 @@ async function rest<T>(env: Env, path: string, init?: RequestInit): Promise<T> {
   return JSON.parse(text) as T
 }
 
-async function notifySlack(webhookUrl: string | undefined, message: string) {
-  if (!webhookUrl) return
-  try {
-    const body = JSON.stringify({ text: message })
-    await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'payload=' + encodeURIComponent(body) })
-  } catch (error) {
-    console.error('SLACK_NOTIFY_FAILED', error)
-  }
-}
-
 export type UnsubscribeResult =
   | { ok: true; message: string }
   | { ok: false; status: number; error: string }
@@ -47,6 +39,8 @@ export async function handleUnsubscribe(env: Env, token: string): Promise<Unsubs
     env, `unsubscribe_tokens?select=id,organization_id,contact_id,enrollment_id,sequence_id&token=eq.${encodeURIComponent(token)}&limit=1`)
   const record = tokens[0]
   if (!record) return { ok: false, status: 404, error: 'This unsubscribe link is invalid or has expired.' }
+  const stoppedSequenceIds = new Set<string>()
+  if (record.sequence_id) stoppedSequenceIds.add(record.sequence_id)
   if (record.enrollment_id) {
     const stoppedAt = new Date().toISOString()
     await rest(env, `sequence_enrollments?id=eq.${record.enrollment_id}`, {
@@ -57,6 +51,12 @@ export async function handleUnsubscribe(env: Env, token: string): Promise<Unsubs
   }
 
   const pausedStates = ['pending', 'active', 'waiting', 'sending', 'paused']
+  let affected: Array<{ sequence_id: string }> = []
+  try {
+    affected = await rest<Array<{ sequence_id: string }>>(
+      env, `sequence_enrollments?select=sequence_id&organization_id=eq.${record.organization_id}&contact_id=eq.${record.contact_id}&state=in.(${pausedStates.join(',')})&limit=100`)
+  } catch { /* unsubscribe must not fail because of bookkeeping */ }
+  for (const row of affected) stoppedSequenceIds.add(row.sequence_id)
   await rest(env, `sequence_enrollments?organization_id=eq.${record.organization_id}&contact_id=eq.${record.contact_id}&state=in.(${pausedStates.join(',')})`, {
     method: 'PATCH',
     headers: { Prefer: 'return=minimal', 'Content-Type': 'application/json' },
@@ -104,6 +104,9 @@ export async function handleUnsubscribe(env: Env, token: string): Promise<Unsubs
     }
   } catch { }
   await notifySlack((env as unknown as { SLACK_WEBHOOK_URL?: string }).SLACK_WEBHOOK_URL, `Unsubscribe: ${email ?? 'contact'} opted out via email link. All active enrollments stopped — sequence started by ${unsubscribeStarter}.`)
+  for (const sequenceId of stoppedSequenceIds) {
+    try { await maybeNotifySequenceCompleted(env, { organizationId: record.organization_id, sequenceId }) } catch (checkError) { console.error('COMPLETION_CHECK_FAILED', checkError) }
+  }
 
   await rest(env, `unsubscribe_tokens?id=eq.${record.id}`, {
     method: 'PATCH',
@@ -209,6 +212,7 @@ export async function sendSequenceStep(env: Env, input: { organizationId: string
       headers: { Prefer: 'return=minimal', 'Content-Type': 'application/json' },
       body: JSON.stringify({ state: 'unsubscribed', stopped_at: new Date().toISOString(), stop_reason: 'unsubscribe', next_run_at: null }),
     })
+    try { await maybeNotifySequenceCompleted(env, { organizationId: enrollment.organization_id, sequenceId: enrollment.sequence_id }) } catch (checkError) { console.error('COMPLETION_CHECK_FAILED', checkError) }
     return { ok: false, status: 422, error: 'Contact is suppressed and cannot receive sequence email.', code: 'suppressed' }
   }
 
@@ -342,6 +346,7 @@ export async function sendSequenceStep(env: Env, input: { organizationId: string
           }),
         })
       } catch (persistError) { console.error('ENROLLMENT_FAIL_UPDATE_FAILED', persistError) }
+      try { await maybeNotifySequenceCompleted(env, { organizationId: enrollment.organization_id, sequenceId: enrollment.sequence_id }) } catch (checkError) { console.error('COMPLETION_CHECK_FAILED', checkError) }
       return { ok: false, status: 422, error: 'Email could not be sent.', code }
     }
 
@@ -412,6 +417,10 @@ export async function sendSequenceStep(env: Env, input: { organizationId: string
       source: 'worker.sequence_send',
     }),
   })
+
+  if (!nextStep) {
+    try { await maybeNotifySequenceCompleted(env, { organizationId: enrollment.organization_id, sequenceId: enrollment.sequence_id }) } catch (checkError) { console.error('COMPLETION_CHECK_FAILED', checkError) }
+  }
 
   return { ok: true, enrollmentId: enrollment.id, contactEmail: contact.email, stepPosition: step.position, unsubscribeUrl }
 }

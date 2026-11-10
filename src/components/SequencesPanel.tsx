@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { AlertTriangle, CheckCircle2, Mail, Plus, Trash2, Pause, Play, XCircle, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { sendSequenceStep, dispatchDue } from '../lib/mailbox-api'
+import { sendSequenceStep, dispatchDue, checkSequenceCompletion } from '../lib/mailbox-api'
 import { calculateSequenceKpis, formatKpi, type SequenceKpis } from '../lib/dashboard-metrics'
 import { EntityPage, RailCard, SlideOut, CenterDialog } from './Overlay'
 import Typeahead from './DataList'
@@ -512,6 +512,8 @@ export function SequencesPanel({ userId, canWrite }: { userId: string; canWrite:
     if (action === 'stop') {
       const contactName = (enrollment.contacts ? `${enrollment.contacts.first_name} ${enrollment.contacts.last_name}` : 'contact').trim()
       await supabase!.from('activity_events').insert({ organization_id: orgId, contact_id: enrollment.contact_id, event_type: 'sequence_stop', summary: `Sequence stopped manually for ${contactName}`, source: 'sequences.panel' })
+      // The stop above happened inside Supabase, not the worker — give the worker a chance to announce completion.
+      if (selectedId) void checkSequenceCompletion(orgId, selectedId)
     }
     setEnrollments(current => current.map(row => row.id === enrollment.id ? { ...row, ...(action === 'pause' ? { state: 'paused' } : action === 'resume' ? { state: 'active', next_run_at: new Date().toISOString() } : { state: 'cancelled', stopped_at: new Date().toISOString(), stop_reason: 'manual_stop', next_run_at: null }) } : row))
   }
